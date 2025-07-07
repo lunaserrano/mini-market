@@ -3,7 +3,7 @@ import { AppLayout } from './app/layout/component/app.layout';
 // import { Dashboard } from './app/pages/dashboard/dashboard';
 import { Landing } from './app/pages/landing/landing';
 import { Notfound } from './app/pages/notfound/notfound';
-import { MainProductosComponent } from './app/pages/main-productos';
+import { MainProductosComponent } from './app/pages/Administracion/main-productos';
 
 export const appRoutes: Routes = [
     {

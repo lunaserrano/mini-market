@@ -65,6 +65,10 @@ import { LayoutService } from '../service/layout.service';
                 <i class="pi pi-ellipsis-v"></i>
             </button>
 
+            <button type="button" class="layout-topbar-action" (click)="logout()" title="Cerrar sesión">
+                <i class="pi pi-sign-out"></i>
+            </button>
+
             <!-- <div class="layout-topbar-menu hidden lg:block">
                 <div class="layout-topbar-menu-content">
                     <button type="button" class="layout-topbar-action">
@@ -91,5 +95,10 @@ export class AppTopbar {
 
     toggleDarkMode() {
         this.layoutService.layoutConfig.update((state) => ({ ...state, darkTheme: !state.darkTheme }));
+    }
+
+    logout() {
+        localStorage.removeItem('jwt');
+        window.location.href = '/auth/login';
     }
 }
