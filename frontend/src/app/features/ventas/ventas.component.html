@@ -1,0 +1,50 @@
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-xl font-bold">Ventas</h1>
+  <a routerLink="/pos"><p-button label="Ir al Punto de Venta" icon="pi pi-shopping-cart" /></a>
+</div>
+
+<p-table [value]="ventas()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+  <ng-template #header>
+    <tr>
+      <th>Folio</th>
+      <th>Fecha</th>
+      <th>Cliente</th>
+      <th>Total</th>
+      <th>Estado</th>
+      <th style="width: 90px"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-venta>
+    <tr>
+      <td>#{{ venta.folio }}</td>
+      <td>{{ venta.fecha | date: 'short' }}</td>
+      <td>{{ venta.clienteNombre ?? 'Consumidor final' }}</td>
+      <td>{{ venta.total | moneda }}</td>
+      <td>
+        <p-tag [value]="venta.estado" [severity]="venta.estado === 'COMPLETADA' ? 'success' : 'danger'" />
+      </td>
+      <td>
+        @if (venta.estado === 'COMPLETADA' && authService.tienePermiso('admin', 'supervisor')) {
+          <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="abrirAnular(venta)" />
+        }
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template #emptymessage>
+    <tr>
+      <td colspan="6" class="text-center text-surface-400 py-10">
+        Todavía no hay ventas registradas. Ve al <a routerLink="/pos" class="text-primary underline">Punto de Venta</a> para crear la primera.
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog header="Anular venta" [(visible)]="mostrarAnular" [modal]="true" [style]="{ width: '22rem' }">
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Motivo de anulación</label>
+    <input pInputText [(ngModel)]="motivoAnulacion" />
+  </div>
+  <ng-template #footer>
+    <p-button label="Anular" icon="pi pi-check" severity="danger" (onClick)="confirmarAnular()" />
+  </ng-template>
+</p-dialog>

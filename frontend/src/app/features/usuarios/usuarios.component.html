@@ -1,0 +1,68 @@
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-xl font-bold">Usuarios</h1>
+  <p-button label="Nuevo usuario" icon="pi pi-plus" (onClick)="nuevo()" />
+</div>
+
+<p-table [value]="usuarios()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+  <ng-template #header>
+    <tr>
+      <th>Nombre</th>
+      <th>Usuario</th>
+      <th>Rol</th>
+      <th>Activo</th>
+      <th style="width: 130px"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-usuario>
+    <tr>
+      <td>{{ usuario.nombreCompleto }}</td>
+      <td>{{ usuario.username }}</td>
+      <td><p-tag [value]="usuario.rol" severity="info" /></td>
+      <td>
+        <p-toggleswitch [ngModel]="usuario.estado === 'A'" (ngModelChange)="cambiarEstado(usuario)" />
+      </td>
+      <td>
+        <div class="flex gap-1">
+          <p-button icon="pi pi-pencil" [text]="true" (onClick)="editar(usuario)" />
+          <p-button icon="pi pi-key" [text]="true" severity="secondary" (onClick)="abrirReset(usuario)" />
+        </div>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog [header]="editandoId ? 'Editar usuario' : 'Nuevo usuario'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '26rem' }">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Nombre completo</label>
+      <input pInputText [(ngModel)]="formulario.nombreCompleto" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Usuario</label>
+      <input pInputText [(ngModel)]="formulario.username" [disabled]="!!editandoId" />
+    </div>
+    @if (!editandoId) {
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Contraseña</label>
+        <p-password [(ngModel)]="formulario.password" [toggleMask]="true" styleClass="w-full" inputStyleClass="w-full" />
+      </div>
+    }
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Rol</label>
+      <p-select [(ngModel)]="formulario.rol" [options]="roles" optionLabel="label" optionValue="value" styleClass="w-full" />
+    </div>
+  </div>
+  <ng-template #footer>
+    <p-button label="Guardar" icon="pi pi-check" (onClick)="guardar()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog header="Restablecer contraseña" [(visible)]="mostrarReset" [modal]="true" [style]="{ width: '22rem' }">
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Nueva contraseña</label>
+    <p-password [(ngModel)]="nuevaPassword" [toggleMask]="true" styleClass="w-full" inputStyleClass="w-full" />
+  </div>
+  <ng-template #footer>
+    <p-button label="Restablecer" icon="pi pi-check" (onClick)="confirmarReset()" />
+  </ng-template>
+</p-dialog>

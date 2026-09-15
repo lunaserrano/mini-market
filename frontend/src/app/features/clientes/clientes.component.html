@@ -1,0 +1,64 @@
+<p-confirmdialog />
+
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-xl font-bold">Clientes</h1>
+  <p-button label="Nuevo cliente" icon="pi pi-plus" (onClick)="nuevo()" />
+</div>
+
+<p-table [value]="clientes()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+  <ng-template #header>
+    <tr>
+      <th>Nombre</th>
+      <th>Teléfono</th>
+      <th>Email</th>
+      <th>Estado</th>
+      <th style="width: 100px"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-cliente>
+    <tr>
+      <td>{{ cliente.nombre }}</td>
+      <td>{{ cliente.telefono }}</td>
+      <td>{{ cliente.email }}</td>
+      <td>
+        <p-tag [value]="cliente.estado === 'A' ? 'Activo' : 'Inactivo'" [severity]="cliente.estado === 'A' ? 'success' : 'danger'" />
+      </td>
+      <td>
+        <div class="flex gap-1">
+          <p-button icon="pi pi-pencil" [text]="true" (onClick)="editar(cliente)" />
+          <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="confirmarDesactivar(cliente)" />
+        </div>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog [header]="editandoId ? 'Editar cliente' : 'Nuevo cliente'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '26rem' }">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Nombre</label>
+      <input pInputText [(ngModel)]="formulario.nombre" />
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Teléfono</label>
+        <input pInputText [(ngModel)]="formulario.telefono" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Email</label>
+        <input pInputText [(ngModel)]="formulario.email" />
+      </div>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Dirección</label>
+      <input pInputText [(ngModel)]="formulario.direccion" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">NIT / identificación fiscal</label>
+      <input pInputText [(ngModel)]="formulario.identificacionFiscal" />
+    </div>
+  </div>
+  <ng-template #footer>
+    <p-button label="Guardar" icon="pi pi-check" (onClick)="guardar()" />
+  </ng-template>
+</p-dialog>

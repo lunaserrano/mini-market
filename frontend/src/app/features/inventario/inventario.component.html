@@ -1,0 +1,75 @@
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-xl font-bold">Inventario</h1>
+  <p-button label="Ajustar stock" icon="pi pi-sliders-h" (onClick)="abrirAjuste()" />
+</div>
+
+<p-tabs value="0">
+  <p-tablist>
+    <p-tab value="0">Stock actual</p-tab>
+    <p-tab value="1">Historial de movimientos</p-tab>
+  </p-tablist>
+  <p-tabpanels>
+    <p-tabpanel value="0">
+      <p-table [value]="inventario()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+        <ng-template #header>
+          <tr>
+            <th>Producto</th>
+            <th>Stock actual</th>
+            <th>Stock mínimo</th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-item>
+          <tr>
+            <td>{{ item.productoNombre }}</td>
+            <td [class.text-red-500]="item.stockActual <= item.stockMinimo">{{ item.stockActual }}</td>
+            <td>{{ item.stockMinimo }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-tabpanel>
+    <p-tabpanel value="1">
+      <p-table [value]="movimientos()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+        <ng-template #header>
+          <tr>
+            <th>Fecha</th>
+            <th>Producto</th>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Saldo</th>
+            <th>Observación</th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-mov>
+          <tr>
+            <td>{{ mov.fechaMovimiento | date: 'short' }}</td>
+            <td>{{ mov.productoNombre }}</td>
+            <td>{{ mov.tipoMovimiento }}</td>
+            <td [class.text-green-600]="mov.cantidad > 0" [class.text-red-500]="mov.cantidad < 0">{{ mov.cantidad }}</td>
+            <td>{{ mov.stockResultante }}</td>
+            <td>{{ mov.observacion }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>
+
+<p-dialog header="Ajustar stock" [(visible)]="mostrarAjuste" [modal]="true" [style]="{ width: '26rem' }">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Producto</label>
+      <p-select [(ngModel)]="ajuste.productoId" [options]="productos()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" [filter]="true" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Cantidad (positivo suma, negativo resta)</label>
+      <input type="number" step="0.01" class="mm-input-number" [(ngModel)]="ajuste.cantidadAjuste" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Motivo</label>
+      <input pInputText [(ngModel)]="ajuste.observacion" placeholder="Ej. Conteo físico, producto dañado..." />
+    </div>
+  </div>
+  <ng-template #footer>
+    <p-button label="Ajustar" icon="pi pi-check" (onClick)="confirmarAjuste()" />
+  </ng-template>
+</p-dialog>

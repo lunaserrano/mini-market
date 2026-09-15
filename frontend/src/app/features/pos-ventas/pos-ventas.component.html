@@ -1,0 +1,165 @@
+@if (cajaVerificada() && !caja()) {
+  <div class="flex flex-col items-center justify-center gap-4 py-20 text-center">
+    <i class="pi pi-lock text-4xl text-surface-400"></i>
+    <p class="text-surface-600">Debes abrir una caja antes de registrar ventas.</p>
+    <p-button label="Ir a Caja" icon="pi pi-wallet" (onClick)="irAAbrirCaja()" />
+  </div>
+} @else if (cajaVerificada()) {
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Buscador + resultados -->
+    <div class="lg:col-span-2 flex flex-col gap-3">
+      <div class="relative">
+        <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-surface-400"></i>
+        <input
+          pInputText
+          class="w-full pl-10"
+          placeholder="Buscar por nombre o código de barras..."
+          [(ngModel)]="termino"
+          (ngModelChange)="onBuscar()"
+          autofocus
+        />
+      </div>
+
+      @if (resultados().length > 0) {
+        <div class="border border-surface-200 dark:border-surface-700 rounded-lg divide-y divide-surface-200 dark:divide-surface-700 max-h-80 overflow-y-auto">
+          @for (producto of resultados(); track producto.productoId) {
+            <button
+              type="button"
+              class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-100 dark:hover:bg-surface-800"
+              (click)="seleccionarProducto(producto)"
+            >
+              <div>
+                <p class="font-medium">{{ producto.nombre }}</p>
+                <p class="text-xs text-surface-500">{{ producto.codigoBarras }} · Stock: {{ producto.stockActual }}</p>
+              </div>
+              <span class="text-primary font-semibold">{{ producto.tiposPrecio[0]?.precioVenta | moneda }}</span>
+            </button>
+          }
+        </div>
+      }
+
+      <p-table [value]="carrito()" styleClass="p-datatable-sm mt-2" [scrollable]="true" scrollHeight="400px">
+        <ng-template #header>
+          <tr>
+            <th>Producto</th>
+            <th>Presentación</th>
+            <th style="width: 110px">Cantidad</th>
+            <th style="width: 100px">Precio</th>
+            <th style="width: 100px">Subtotal</th>
+            <th style="width: 50px"></th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-linea>
+          <tr>
+            <td>{{ linea.productoNombre }}</td>
+            <td>{{ linea.tipoPrecioNombre }}</td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                class="mm-input-number w-20 text-center"
+                [ngModel]="linea.cantidad"
+                (ngModelChange)="actualizarCantidad(linea, $event)"
+              />
+            </td>
+            <td>{{ linea.precioUnitario | moneda }}</td>
+            <td>{{ linea.subtotal | moneda }}</td>
+            <td>
+              <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="quitarLinea(linea)" />
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template #emptymessage>
+          <tr>
+            <td colspan="6" class="text-center text-surface-400 py-6">El carrito está vacío. Busca un producto para comenzar.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <!-- Resumen y cobro -->
+    <div class="flex flex-col gap-3 bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-4 h-fit">
+      <h2 class="font-semibold text-lg">Resumen</h2>
+      <div class="flex justify-between text-sm">
+        <span>Subtotal</span><span>{{ subtotal() | moneda }}</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span>Descuento</span><span>{{ descuentoTotal() | moneda }}</span>
+      </div>
+      <div class="flex justify-between font-bold text-lg border-t border-surface-200 dark:border-surface-700 pt-2">
+        <span>Total</span><span>{{ total() | moneda }}</span>
+      </div>
+      <p class="text-xs text-surface-400">El impuesto se calcula y confirma en el servidor al registrar la venta.</p>
+      <p-button label="Cobrar" icon="pi pi-check" styleClass="w-full mt-2" [disabled]="carrito().length === 0" (onClick)="abrirPago()" />
+    </div>
+  </div>
+}
+
+<!-- Selección de presentación (TipoPrecio) -->
+<p-dialog header="Selecciona presentación" [(visible)]="seleccionandoTipoPrecio" [modal]="true" [style]="{ width: '24rem' }">
+  @if (productoSeleccionado) {
+    <p class="mb-3 font-medium">{{ productoSeleccionado.nombre }}</p>
+    <div class="flex flex-col gap-2">
+      @for (tp of productoSeleccionado.tiposPrecio; track tp.id) {
+        <button
+          type="button"
+          class="flex justify-between items-center px-3 py-2 rounded-lg border"
+          [class.border-primary]="tipoPrecioSeleccionado?.id === tp.id"
+          [class.border-surface-200]="tipoPrecioSeleccionado?.id !== tp.id"
+          (click)="tipoPrecioSeleccionado = tp"
+        >
+          <span>{{ tp.nombre }} <span class="text-xs text-surface-400">(x{{ tp.cantidadBase }})</span></span>
+          <span class="font-semibold">{{ tp.precioVenta | moneda }}</span>
+        </button>
+      }
+    </div>
+  }
+  <ng-template #footer>
+    <p-button label="Agregar" icon="pi pi-plus" (onClick)="confirmarTipoPrecio()" />
+  </ng-template>
+</p-dialog>
+
+<!-- Cobro / pagos múltiples -->
+<p-dialog header="Registrar pago" [(visible)]="mostrarPago" [modal]="true" [style]="{ width: '28rem' }">
+  <div class="flex flex-col gap-3">
+    <p class="text-lg font-bold text-center">Total a pagar: {{ total() | moneda }}</p>
+
+    @for (pago of pagos; track $index) {
+      <div class="flex gap-2 items-end">
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="text-xs">Método</label>
+          <p-select [(ngModel)]="pago.metodo" [options]="metodosPago" optionLabel="label" optionValue="value" styleClass="w-full" />
+        </div>
+        <div class="flex flex-col gap-1 flex-1">
+          <label class="text-xs">Monto</label>
+          <input type="number" min="0" step="0.01" class="mm-input-number" [(ngModel)]="pago.monto" />
+        </div>
+        <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarLineaPago($index)" />
+      </div>
+    }
+
+    <p-button label="Agregar otro método de pago" icon="pi pi-plus" [text]="true" (onClick)="agregarLineaPago()" />
+
+    <div class="flex justify-between text-sm border-t border-surface-200 dark:border-surface-700 pt-2">
+      <span>Total pagado</span>
+      <span [class.text-red-500]="totalPagado() < total()" [class.text-green-600]="totalPagado() >= total()">
+        {{ totalPagado() | moneda }}
+      </span>
+    </div>
+    @if (totalPagado() < total()) {
+      <p class="text-xs text-red-500 text-right">Faltan {{ total() - totalPagado() | moneda }}</p>
+    } @else if (totalPagado() > total()) {
+      <p class="text-xs text-surface-400 text-right">Vuelto: {{ totalPagado() - total() | moneda }}</p>
+    }
+  </div>
+  <ng-template #footer>
+    <p-button
+      label="Confirmar venta"
+      icon="pi pi-check"
+      [loading]="procesandoVenta()"
+      [disabled]="totalPagado() < total()"
+      (onClick)="confirmarVenta()"
+    />
+  </ng-template>
+</p-dialog>

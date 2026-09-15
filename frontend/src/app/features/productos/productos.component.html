@@ -1,0 +1,177 @@
+<p-confirmdialog />
+
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-xl font-bold">Productos</h1>
+  <p-button label="Nuevo producto" icon="pi pi-plus" (onClick)="nuevoProducto()" />
+</div>
+
+<p-table [value]="productos()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
+  <ng-template #header>
+    <tr>
+      <th>Nombre</th>
+      <th>Categoría</th>
+      <th>Código de barras</th>
+      <th>Presentaciones</th>
+      <th>Estado</th>
+      <th style="width: 100px"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-producto>
+    <tr>
+      <td>{{ producto.nombre }}</td>
+      <td>{{ producto.categoriaNombre }}</td>
+      <td>{{ producto.codigoBarras }}</td>
+      <td>
+        @for (tp of producto.tiposPrecio; track tp.id) {
+          <p-tag severity="info" styleClass="mr-1 mb-1">{{ tp.nombre }}: {{ tp.precioVenta | moneda }}</p-tag>
+        }
+      </td>
+      <td>
+        <p-tag [value]="producto.estado === 'A' ? 'Activo' : 'Inactivo'" [severity]="producto.estado === 'A' ? 'success' : 'danger'" />
+      </td>
+      <td>
+        <div class="flex gap-1">
+          <p-button icon="pi pi-pencil" [text]="true" (onClick)="editarProducto(producto)" />
+          <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="confirmarDesactivar(producto)" />
+        </div>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog [header]="editandoId ? 'Editar producto' : 'Nuevo producto'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '32rem' }">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Nombre</label>
+      <input pInputText [(ngModel)]="formulario.nombre" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Categoría</label>
+      <p-select [(ngModel)]="formulario.categoriaId" [options]="categorias()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" />
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Código de barras</label>
+        <input pInputText [(ngModel)]="formulario.codigoBarras" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Código interno / SKU</label>
+        <input pInputText [(ngModel)]="formulario.codigoInterno" />
+      </div>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Unidad base (en la que se lleva el inventario)</label>
+      <input pInputText [(ngModel)]="formulario.unidadBase" list="unidades-base" placeholder="unidad, libra, kg..." />
+      <datalist id="unidades-base">
+        @for (u of unidadesBaseSugeridas; track u) {
+          <option [value]="u"></option>
+        }
+      </datalist>
+    </div>
+
+    @if (!editandoId) {
+      <div class="border-t border-surface-200 dark:border-surface-700 pt-3">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="font-medium">Tipos de precio</h3>
+          <p-button label="Agregar" icon="pi pi-plus" [text]="true" (onClick)="agregarTipoPrecio()" />
+        </div>
+        <p class="text-xs text-surface-400 mb-2">
+          "Cant. base" es el factor de conversión hacia la unidad base del producto. Ej. si la unidad base es
+          <strong>libra</strong>: "Libra" = 1, "Media libra" = 0.5. El stock siempre se descuenta/carga en unidad base.
+          "Precio con IVA" es lo que realmente cobra el POS; se recalcula automáticamente a partir de
+          "Precio sin IVA" usando el {{ (factorImpuesto() - 1) * 100 | number: '1.0-2' }}% configurado en Configuración
+          (también puedes escribir el precio con IVA directamente).
+        </p>
+        <div class="grid grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1">
+          <span class="col-span-3">Nombre</span>
+          <span class="col-span-2">Cant. base</span>
+          <span class="col-span-2">Sin IVA</span>
+          <span class="col-span-2">Con IVA</span>
+          <span class="col-span-2">Default</span>
+        </div>
+        @for (tp of formulario.tiposPrecio; track $index) {
+          <div class="grid grid-cols-12 gap-2 items-center mb-2">
+            <input pInputText class="col-span-3" placeholder="Nombre" [(ngModel)]="tp.nombre" />
+            <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Cant. base" [(ngModel)]="tp.cantidadBase" />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class="mm-input-number col-span-2"
+              [ngModel]="tp.precioBase"
+              (ngModelChange)="actualizarDesdeBase(tp, $event)"
+            />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class="mm-input-number col-span-2"
+              [ngModel]="tp.precioVenta"
+              (ngModelChange)="actualizarDesdeVenta(tp, $event)"
+            />
+            <div class="col-span-2 flex items-center gap-1">
+              <p-checkbox [(ngModel)]="tp.esDefault" [binary]="true" />
+              <label class="text-xs">Default</label>
+            </div>
+            <p-button class="col-span-1" icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarTipoPrecio($index)" />
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="border-t border-surface-200 dark:border-surface-700 pt-3">
+        <h3 class="font-medium mb-2">Presentaciones (tipos de precio)</h3>
+        <p class="text-xs text-surface-400 mb-2">
+          "Cant. base" es el factor de conversión hacia la unidad base ({{ formulario.unidadBase }}). Ej.: "Media libra" = 0.5.
+          Los cambios aquí se guardan al instante, sin necesidad de presionar "Guardar".
+        </p>
+
+        @for (tp of tiposPrecioExistentes(); track tp.id) {
+          <div class="flex items-center justify-between gap-2 mb-1 px-2 py-1.5 rounded-lg bg-surface-100 dark:bg-surface-800">
+            <span class="text-sm">
+              {{ tp.nombre }} (x{{ tp.cantidadBase }}) — {{ tp.precioVenta | moneda }} con IVA
+              <span class="text-surface-400">({{ precioSinIva(tp.precioVenta) | moneda }} sin IVA)</span>
+              @if (tp.esDefault) { <span class="text-xs text-primary">· default</span> }
+            </span>
+            <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="eliminarTipoPrecioExistente(tp)" />
+          </div>
+        }
+
+        <div class="grid grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1 mt-3">
+          <span class="col-span-3">Nombre</span>
+          <span class="col-span-2">Cant. base</span>
+          <span class="col-span-2">Sin IVA</span>
+          <span class="col-span-2">Con IVA</span>
+          <span class="col-span-2">Default</span>
+        </div>
+        <div class="grid grid-cols-12 gap-2 items-center">
+          <input pInputText class="col-span-3" placeholder="Ej. Media libra" [(ngModel)]="nuevoTipoPrecio.nombre" />
+          <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Cant. base" [(ngModel)]="nuevoTipoPrecio.cantidadBase" />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            class="mm-input-number col-span-2"
+            [ngModel]="nuevoTipoPrecio.precioBase"
+            (ngModelChange)="actualizarDesdeBase(nuevoTipoPrecio, $event)"
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            class="mm-input-number col-span-2"
+            [ngModel]="nuevoTipoPrecio.precioVenta"
+            (ngModelChange)="actualizarDesdeVenta(nuevoTipoPrecio, $event)"
+          />
+          <div class="col-span-2 flex items-center gap-1">
+            <p-checkbox [(ngModel)]="nuevoTipoPrecio.esDefault" [binary]="true" />
+            <label class="text-xs">Default</label>
+          </div>
+          <p-button class="col-span-1" icon="pi pi-plus" [loading]="agregandoTipoPrecio()" (onClick)="guardarTipoPrecioExistente()" />
+        </div>
+      </div>
+    }
+  </div>
+  <ng-template #footer>
+    <p-button label="Guardar" icon="pi pi-check" (onClick)="guardar()" />
+  </ng-template>
+</p-dialog>
