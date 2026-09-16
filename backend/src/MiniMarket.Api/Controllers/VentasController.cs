@@ -21,8 +21,9 @@ public class VentasController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Listar([FromQuery] int? sucursalId, [FromQuery] DateTime? desde, [FromQuery] DateTime? hasta) =>
-        Ok(await _service.ListarAsync(sucursalId, desde, hasta));
+    public async Task<IActionResult> Listar(
+        [FromQuery] int? sucursalId, [FromQuery] int? cajaId, [FromQuery] DateTime? desde, [FromQuery] DateTime? hasta) =>
+        Ok(await _service.ListarAsync(sucursalId, cajaId, desde, hasta));
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Obtener(int id) => Ok(await _service.ObtenerAsync(id));

@@ -1,8 +1,11 @@
+/** costoUnidadMedida es el precio pagado por TODA la unidad de medida elegida (ej. $30 la caja
+ * completa), no por unidad base — el backend resuelve el factor de conversión a partir de
+ * tipoPrecioId (la misma presentación que usan las Ventas), nunca se manda un factor libre. */
 export interface DetalleCompraCreate {
   productoId: number;
+  tipoPrecioId: number;
   cantidad: number;
-  cantidadBase: number;
-  costoUnitario: number;
+  costoUnidadMedida: number;
 }
 
 export interface CompraCreate {
@@ -14,6 +17,9 @@ export interface CompraCreate {
 export interface DetalleCompra {
   productoId: number;
   productoNombre: string;
+  /** Nullable: compras registradas antes de este cambio no tienen presentación asociada. */
+  tipoPrecioId?: number | null;
+  tipoPrecioNombre?: string | null;
   cantidad: number;
   cantidadBaseCalculada: number;
   costoUnitario: number;

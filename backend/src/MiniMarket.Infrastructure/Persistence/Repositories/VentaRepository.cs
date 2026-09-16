@@ -60,6 +60,13 @@ public class VentaRepository : IVentaRepository
             "SELECT * FROM Venta WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
     }
 
+    public async Task<IReadOnlyList<DetalleVenta>> ObtenerDetallesEntidadAsync(int ventaId, IDbTransaction transaction)
+    {
+        const string sql = "SELECT * FROM DetalleVenta WHERE VentaId = @ventaId";
+        var detalles = await transaction.Connection!.QueryAsync<DetalleVenta>(sql, new { ventaId }, transaction);
+        return detalles.AsList();
+    }
+
     public async Task<VentaDto?> ObtenerDetalleAsync(int empresaId, int id)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
@@ -86,7 +93,7 @@ public class VentaRepository : IVentaRepository
             detalles.AsList(), pagos.AsList());
     }
 
-    public async Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int empresaId, int? sucursalId, int? usuarioId, DateTime? desde, DateTime? hasta)
+    public async Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int empresaId, int? sucursalId, int? usuarioId, int? cajaId, DateTime? desde, DateTime? hasta)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         const string sql = """
@@ -96,11 +103,12 @@ public class VentaRepository : IVentaRepository
             WHERE v.EmpresaId = @empresaId
               AND (@sucursalId IS NULL OR v.SucursalId = @sucursalId)
               AND (@usuarioId IS NULL OR v.UsuarioId = @usuarioId)
+              AND (@cajaId IS NULL OR v.CajaId = @cajaId)
               AND (@desde IS NULL OR v.Fecha >= @desde)
               AND (@hasta IS NULL OR v.Fecha <= @hasta)
             ORDER BY v.Fecha DESC
             """;
-        var items = await connection.QueryAsync<VentaResumenDto>(sql, new { empresaId, sucursalId, usuarioId, desde, hasta });
+        var items = await connection.QueryAsync<VentaResumenDto>(sql, new { empresaId, sucursalId, usuarioId, cajaId, desde, hasta });
         return items.AsList();
     }
 

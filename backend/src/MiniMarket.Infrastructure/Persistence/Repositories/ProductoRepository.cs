@@ -192,4 +192,11 @@ public class ProductoRepository : IProductoRepository
             if (transaction is null) connection.Dispose();
         }
     }
+
+    public async Task ActualizarPrecioCompraAsync(int tipoPrecioId, decimal precioCompra, IDbTransaction transaction)
+    {
+        await transaction.Connection!.ExecuteAsync(
+            "UPDATE TipoPrecio SET PrecioCompra = @precioCompra WHERE Id = @tipoPrecioId",
+            new { tipoPrecioId, precioCompra }, transaction);
+    }
 }

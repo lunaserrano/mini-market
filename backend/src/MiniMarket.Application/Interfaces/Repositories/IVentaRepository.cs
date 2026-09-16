@@ -13,7 +13,9 @@ public interface IVentaRepository
     Task CrearPagoAsync(PagoVenta pago, IDbTransaction transaction);
 
     Task<Venta?> ObtenerEntidadAsync(int empresaId, int id);
+    /// <summary>Líneas de la venta dentro de la transacción de anulación, para restituir stock.</summary>
+    Task<IReadOnlyList<DetalleVenta>> ObtenerDetallesEntidadAsync(int ventaId, IDbTransaction transaction);
     Task<VentaDto?> ObtenerDetalleAsync(int empresaId, int id);
-    Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int empresaId, int? sucursalId, int? usuarioId, DateTime? desde, DateTime? hasta);
+    Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int empresaId, int? sucursalId, int? usuarioId, int? cajaId, DateTime? desde, DateTime? hasta);
     Task AnularAsync(int id, int usuarioAnulacionId, string motivo, IDbTransaction transaction);
 }

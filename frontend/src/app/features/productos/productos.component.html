@@ -83,15 +83,16 @@
           (también puedes escribir el precio con IVA directamente).
         </p>
         <div class="grid grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1">
-          <span class="col-span-3">Nombre</span>
+          <span class="col-span-2">Nombre</span>
           <span class="col-span-2">Cant. base</span>
           <span class="col-span-2">Sin IVA</span>
           <span class="col-span-2">Con IVA</span>
-          <span class="col-span-2">Default</span>
+          <span class="col-span-2">Costo compra</span>
+          <span class="col-span-1">Default</span>
         </div>
         @for (tp of formulario.tiposPrecio; track $index) {
           <div class="grid grid-cols-12 gap-2 items-center mb-2">
-            <input pInputText class="col-span-3" placeholder="Nombre" [(ngModel)]="tp.nombre" />
+            <input pInputText class="col-span-2" placeholder="Nombre" [(ngModel)]="tp.nombre" />
             <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Cant. base" [(ngModel)]="tp.cantidadBase" />
             <input
               type="number"
@@ -109,9 +110,9 @@
               [ngModel]="tp.precioVenta"
               (ngModelChange)="actualizarDesdeVenta(tp, $event)"
             />
-            <div class="col-span-2 flex items-center gap-1">
+            <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Opcional" [(ngModel)]="tp.precioCompra" />
+            <div class="col-span-1 flex items-center gap-1">
               <p-checkbox [(ngModel)]="tp.esDefault" [binary]="true" />
-              <label class="text-xs">Default</label>
             </div>
             <p-button class="col-span-1" icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarTipoPrecio($index)" />
           </div>
@@ -130,6 +131,7 @@
             <span class="text-sm">
               {{ tp.nombre }} (x{{ tp.cantidadBase }}) — {{ tp.precioVenta | moneda }} con IVA
               <span class="text-surface-400">({{ precioSinIva(tp.precioVenta) | moneda }} sin IVA)</span>
+              @if (tp.precioCompra) { <span class="text-surface-400">· costo compra: {{ tp.precioCompra | moneda }}</span> }
               @if (tp.esDefault) { <span class="text-xs text-primary">· default</span> }
             </span>
             <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="eliminarTipoPrecioExistente(tp)" />
@@ -137,14 +139,15 @@
         }
 
         <div class="grid grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1 mt-3">
-          <span class="col-span-3">Nombre</span>
+          <span class="col-span-2">Nombre</span>
           <span class="col-span-2">Cant. base</span>
           <span class="col-span-2">Sin IVA</span>
           <span class="col-span-2">Con IVA</span>
-          <span class="col-span-2">Default</span>
+          <span class="col-span-2">Costo compra</span>
+          <span class="col-span-1">Default</span>
         </div>
         <div class="grid grid-cols-12 gap-2 items-center">
-          <input pInputText class="col-span-3" placeholder="Ej. Media libra" [(ngModel)]="nuevoTipoPrecio.nombre" />
+          <input pInputText class="col-span-2" placeholder="Ej. Media libra" [(ngModel)]="nuevoTipoPrecio.nombre" />
           <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Cant. base" [(ngModel)]="nuevoTipoPrecio.cantidadBase" />
           <input
             type="number"
@@ -162,9 +165,9 @@
             [ngModel]="nuevoTipoPrecio.precioVenta"
             (ngModelChange)="actualizarDesdeVenta(nuevoTipoPrecio, $event)"
           />
-          <div class="col-span-2 flex items-center gap-1">
+          <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Opcional" [(ngModel)]="nuevoTipoPrecio.precioCompra" />
+          <div class="col-span-1 flex items-center gap-1">
             <p-checkbox [(ngModel)]="nuevoTipoPrecio.esDefault" [binary]="true" />
-            <label class="text-xs">Default</label>
           </div>
           <p-button class="col-span-1" icon="pi pi-plus" [loading]="agregandoTipoPrecio()" (onClick)="guardarTipoPrecioExistente()" />
         </div>

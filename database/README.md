@@ -55,6 +55,17 @@ POS), no un precio base al que se le suma el impuesto encima. `VentaService.Crea
 sumarlo — así el total que el cajero ve en pantalla (que siempre fue `Σ precioVenta × cantidad`) es
 exactamente el mismo que valida el backend, sin desfases al cobrar.
 
+## Compras usan el mismo catálogo de presentaciones que Ventas (`0004_detallecompra_tipoprecio.sql`)
+
+`DetalleCompra` ya no recibía ningún factor de conversión validado: el cliente escribía a mano un
+`CantidadBase` libre por línea. Ahora `DetalleCompra.TipoPrecioId` referencia una presentación real
+del producto (el mismo catálogo `TipoPrecio` que usan las Ventas — Unidad, Cartón x30, Caja x360...),
+resuelta de forma autoritativa en `CompraService.CrearAsync` exactamente igual que ya hacía
+`VentaService.CrearAsync`. Columna nullable a propósito (compras históricas antes de este cambio
+quedan sin presentación asociada, sin backfill inventado). Cada compra además deja
+`TipoPrecio.PrecioCompra` de esa presentación actualizado con el último precio pagado (dentro de la
+misma transacción), para que la siguiente compra ya sugiera el costo más reciente.
+
 ## Multi-tenant sin Row-Level Security (por ahora)
 
 Todas las tablas relevantes llevan `EmpresaId`/`SucursalId` con índice explícito, pensadas para

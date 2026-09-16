@@ -26,4 +26,4 @@ public record VentaDto(
 
 public record VentaResumenDto(int Id, int Folio, DateTime Fecha, string? ClienteNombre, decimal Total, string Estado);
 
-public record AnularVentaRequest(string Motivo);
+public record AnularVentaRequest(string Motivo, bool RestituirStock = true);

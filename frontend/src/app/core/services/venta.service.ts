@@ -14,15 +14,17 @@ export class VentaService {
     return this.http.post<Venta>(this.baseUrl, dto);
   }
 
-  listar(): Observable<VentaResumen[]> {
-    return this.http.get<VentaResumen[]>(this.baseUrl);
+  listar(cajaId?: number): Observable<VentaResumen[]> {
+    const params: Record<string, number> = {};
+    if (cajaId) params['cajaId'] = cajaId;
+    return this.http.get<VentaResumen[]>(this.baseUrl, { params });
   }
 
   obtener(id: number): Observable<Venta> {
     return this.http.get<Venta>(`${this.baseUrl}/${id}`);
   }
 
-  anular(id: number, motivo: string): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/${id}/anular`, { motivo });
+  anular(id: number, motivo: string, restituirStock: boolean): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/${id}/anular`, { motivo, restituirStock });
   }
 }

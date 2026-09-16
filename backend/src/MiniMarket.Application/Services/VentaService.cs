@@ -186,11 +186,11 @@ public class VentaService
             subtotal, descuentoTotal, impuestoTotal, total, detallesDto, pagosDto);
     }
 
-    public Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int? sucursalId, DateTime? desde, DateTime? hasta)
+    public Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int? sucursalId, int? cajaId, DateTime? desde, DateTime? hasta)
     {
         // Un cajero solo ve sus propias ventas; admin/supervisor ven todas las de la sucursal/empresa.
         var usuarioId = _tenant.Rol.Equals("cajero", StringComparison.OrdinalIgnoreCase) ? _tenant.UsuarioId : (int?)null;
-        return _ventaRepository.ListarAsync(_tenant.EmpresaId, sucursalId, usuarioId, desde, hasta);
+        return _ventaRepository.ListarAsync(_tenant.EmpresaId, sucursalId, usuarioId, cajaId, desde, hasta);
     }
 
     public async Task<VentaDto> ObtenerAsync(int id) =>
@@ -205,9 +205,33 @@ public class VentaService
 
         using var uow = _unitOfWorkFactory.Create();
         await _ventaRepository.AnularAsync(id, _tenant.UsuarioId, request.Motivo, uow.Transaction);
-        // Nota: revertir stock de una venta anulada es responsabilidad de esta misma transacción en una
-        // evolución futura (leer DetalleVenta y aplicar MovimientoInventario DevolucionVenta por línea);
-        // se deja fuera del alcance de este esqueleto (ver decisión abierta #8 del plan de arquitectura).
+
+        if (request.RestituirStock)
+        {
+            var detalles = await _ventaRepository.ObtenerDetallesEntidadAsync(id, uow.Transaction);
+            foreach (var detalle in detalles)
+            {
+                var inventario = await _inventarioRepository.ObtenerParaActualizarAsync(detalle.ProductoId, venta.SucursalId, uow.Transaction);
+                var stockActual = inventario?.StockActual ?? 0;
+                var nuevoStock = stockActual + detalle.CantidadBaseCalculada;
+                await _inventarioRepository.ActualizarStockAsync(detalle.ProductoId, venta.SucursalId, nuevoStock, uow.Transaction);
+
+                await _inventarioRepository.RegistrarMovimientoAsync(new MovimientoInventario
+                {
+                    EmpresaId = _tenant.EmpresaId,
+                    SucursalId = venta.SucursalId,
+                    ProductoId = detalle.ProductoId,
+                    UsuarioId = _tenant.UsuarioId,
+                    TipoMovimiento = TipoMovimientoInventario.DevolucionVenta.ToString(),
+                    Cantidad = detalle.CantidadBaseCalculada,
+                    StockResultante = nuevoStock,
+                    DocumentoOrigenTipo = DocumentoOrigenTipo.Venta.ToString(),
+                    DocumentoOrigenId = venta.Id,
+                    FechaMovimiento = DateTime.UtcNow
+                }, uow.Transaction);
+            }
+        }
+
         uow.Commit();
     }
 }

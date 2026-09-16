@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using MiniMarket.Application.DTOs;
 using MiniMarket.Application.Interfaces.Repositories;
 using MiniMarket.Domain.Entities;
 
@@ -29,14 +30,20 @@ public class CajaRepository : ICajaRepository
             "SELECT * FROM Caja WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
     }
 
-    public async Task<IReadOnlyList<Caja>> ListarAsync(int empresaId, int? sucursalId)
+    public async Task<IReadOnlyList<CajaDto>> ListarAsync(int empresaId, int? sucursalId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         const string sql = """
-            SELECT * FROM Caja WHERE EmpresaId = @empresaId AND (@sucursalId IS NULL OR SucursalId = @sucursalId)
-            ORDER BY FechaApertura DESC
+            SELECT c.Id, c.SucursalId, c.UsuarioAperturaId, ua.NombreCompleto AS UsuarioAperturaNombre,
+                   c.FechaApertura, c.MontoInicial, c.UsuarioCierreId, uc.NombreCompleto AS UsuarioCierreNombre,
+                   c.FechaCierre, c.MontoFinalDeclarado, c.MontoFinalSistema, c.Diferencia, c.Estado
+            FROM Caja c
+            INNER JOIN Usuario ua ON ua.Id = c.UsuarioAperturaId
+            LEFT JOIN Usuario uc ON uc.Id = c.UsuarioCierreId
+            WHERE c.EmpresaId = @empresaId AND (@sucursalId IS NULL OR c.SucursalId = @sucursalId)
+            ORDER BY c.FechaApertura DESC
             """;
-        var items = await connection.QueryAsync<Caja>(sql, new { empresaId, sucursalId });
+        var items = await connection.QueryAsync<CajaDto>(sql, new { empresaId, sucursalId });
         return items.AsList();
     }
 

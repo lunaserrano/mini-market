@@ -43,6 +43,52 @@
       </ng-template>
     </p-table>
   }
+
+  @if (authService.tienePermiso('admin', 'supervisor')) {
+    <div class="mt-4">
+      <h2 class="text-lg font-semibold mb-2">Historial de cierres</h2>
+      <p-table [value]="historial()" [loading]="cargandoHistorial()" styleClass="p-datatable-sm" [paginator]="true" [rows]="10">
+        <ng-template #header>
+          <tr>
+            <th>Id</th>
+            <th>Apertura</th>
+            <th>Usuario apertura</th>
+            <th>Cierre</th>
+            <th>Usuario cierre</th>
+            <th>Monto inicial</th>
+            <th>Monto final</th>
+            <th>Diferencia</th>
+            <th>Estado</th>
+            <th style="width: 100px"></th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-item>
+          <tr>
+            <td>#{{ item.id }}</td>
+            <td>{{ item.fechaApertura | date: 'short' }}</td>
+            <td>{{ item.usuarioAperturaNombre }}</td>
+            <td>{{ item.fechaCierre ? (item.fechaCierre | date: 'short') : '—' }}</td>
+            <td>{{ item.usuarioCierreNombre ?? '—' }}</td>
+            <td>{{ item.montoInicial | moneda }}</td>
+            <td>{{ item.montoFinalSistema | moneda }}</td>
+            <td>{{ item.diferencia | moneda }}</td>
+            <td>
+              <p-tag [value]="item.estado" [severity]="item.estado === 'CERRADA' ? 'secondary' : 'success'" />
+            </td>
+            <td class="whitespace-nowrap">
+              <p-button icon="pi pi-eye" [text]="true" (onClick)="verDetalleCierre(item)" />
+              <p-button icon="pi pi-file-pdf" [text]="true" severity="danger" (onClick)="descargarReporte(item)" />
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template #emptymessage>
+          <tr>
+            <td colspan="10" class="text-center text-surface-400 py-6">Todavía no hay cierres de caja registrados.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  }
 </div>
 
 <p-dialog header="Abrir caja" [(visible)]="mostrarApertura" [modal]="true" [style]="{ width: '22rem' }">
@@ -82,5 +128,96 @@
   </div>
   <ng-template #footer>
     <p-button label="Registrar" icon="pi pi-check" (onClick)="confirmarMovimiento()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog header="Detalle del cierre" [(visible)]="mostrarDetalleCierre" [modal]="true" [style]="{ width: '48rem' }">
+  @if (cierreSeleccionado(); as cierre) {
+    <div class="flex flex-col gap-4">
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <p>Caja #{{ cierre.id }}</p>
+        <p>
+          <p-tag [value]="cierre.estado" [severity]="cierre.estado === 'CERRADA' ? 'secondary' : 'success'" />
+        </p>
+        <p>Apertura: {{ cierre.fechaApertura | date: 'short' }}</p>
+        <p>Usuario apertura: {{ cierre.usuarioAperturaNombre }}</p>
+        <p>Cierre: {{ cierre.fechaCierre ? (cierre.fechaCierre | date: 'short') : '—' }}</p>
+        <p>Usuario cierre: {{ cierre.usuarioCierreNombre ?? '—' }}</p>
+        <p>Monto inicial: {{ cierre.montoInicial | moneda }}</p>
+        <p>Monto final declarado: {{ cierre.montoFinalDeclarado | moneda }}</p>
+        <p>Monto final sistema: {{ cierre.montoFinalSistema | moneda }}</p>
+        <p>Diferencia: {{ cierre.diferencia | moneda }}</p>
+      </div>
+
+      @if (cargandoDetalleCierre()) {
+        <p class="text-center text-surface-400 py-6">Cargando...</p>
+      } @else {
+        <div>
+          <p class="text-sm font-semibold mb-1">Ventas del turno</p>
+          <p-table [value]="ventasCierre()" styleClass="p-datatable-sm">
+            <ng-template #header>
+              <tr>
+                <th>Folio</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Total</th>
+                <th>Estado</th>
+              </tr>
+            </ng-template>
+            <ng-template #body let-venta>
+              <tr>
+                <td>#{{ venta.folio }}</td>
+                <td>{{ venta.fecha | date: 'short' }}</td>
+                <td>{{ venta.clienteNombre ?? 'Consumidor final' }}</td>
+                <td>{{ venta.total | moneda }}</td>
+                <td>{{ venta.estado }}</td>
+              </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+              <tr>
+                <td colspan="5" class="text-center text-surface-400 py-4">Sin ventas en este turno.</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+
+        <div>
+          <p class="text-sm font-semibold mb-1">Movimientos manuales</p>
+          <p-table [value]="movimientosCierre()" styleClass="p-datatable-sm">
+            <ng-template #header>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+              </tr>
+            </ng-template>
+            <ng-template #body let-mov>
+              <tr>
+                <td>{{ mov.fecha | date: 'short' }}</td>
+                <td>
+                  <span [class.text-green-600]="mov.tipo === 'INGRESO'" [class.text-red-500]="mov.tipo === 'EGRESO'">{{ mov.tipo }}</span>
+                </td>
+                <td>{{ mov.concepto }}</td>
+                <td>{{ mov.monto | moneda }}</td>
+              </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+              <tr>
+                <td colspan="4" class="text-center text-surface-400 py-4">Sin movimientos manuales en este turno.</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      }
+    </div>
+  }
+  <ng-template #footer>
+    <p-button
+      label="Descargar reporte"
+      icon="pi pi-file-pdf"
+      severity="secondary"
+      (onClick)="cierreSeleccionado() && descargarReporte(cierreSeleccionado()!)"
+    />
   </ng-template>
 </p-dialog>

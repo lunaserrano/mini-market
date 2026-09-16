@@ -3,20 +3,34 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
+import { TooltipModule } from 'primeng/tooltip';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
 import { VentaService } from '../../core/services/venta.service';
-import { VentaResumen } from '../../core/models/venta.models';
+import { Venta, VentaResumen } from '../../core/models/venta.models';
 import { MonedaPipe } from '../../core/pipes/moneda.pipe';
 
 @Component({
   selector: 'app-ventas',
   standalone: true,
-  imports: [DatePipe, MonedaPipe, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, TableModule, TagModule],
+  imports: [
+    DatePipe,
+    MonedaPipe,
+    FormsModule,
+    RouterLink,
+    ButtonModule,
+    CheckboxModule,
+    DialogModule,
+    InputTextModule,
+    TableModule,
+    TagModule,
+    TooltipModule
+  ],
   templateUrl: './ventas.component.html'
 })
 export class VentasComponent implements OnInit {
@@ -26,6 +40,11 @@ export class VentasComponent implements OnInit {
   readonly mostrarAnular = signal(false);
   ventaAnularId: number | null = null;
   motivoAnulacion = '';
+  restituirStock = true;
+
+  readonly mostrarDetalle = signal(false);
+  readonly ventaDetalle = signal<Venta | null>(null);
+  readonly cargandoDetalle = signal(false);
 
   constructor(
     private readonly ventaService: VentaService,
@@ -51,15 +70,29 @@ export class VentasComponent implements OnInit {
   abrirAnular(venta: VentaResumen): void {
     this.ventaAnularId = venta.id;
     this.motivoAnulacion = '';
+    this.restituirStock = true;
     this.mostrarAnular.set(true);
   }
 
   confirmarAnular(): void {
     if (!this.ventaAnularId || !this.motivoAnulacion) return;
-    this.ventaService.anular(this.ventaAnularId, this.motivoAnulacion).subscribe(() => {
+    this.ventaService.anular(this.ventaAnularId, this.motivoAnulacion, this.restituirStock).subscribe(() => {
       this.mostrarAnular.set(false);
       this.cargar();
       this.messageService.add({ severity: 'success', summary: 'Venta anulada' });
+    });
+  }
+
+  verDetalle(venta: VentaResumen): void {
+    this.ventaDetalle.set(null);
+    this.cargandoDetalle.set(true);
+    this.mostrarDetalle.set(true);
+    this.ventaService.obtener(venta.id).subscribe({
+      next: (detalle) => {
+        this.ventaDetalle.set(detalle);
+        this.cargandoDetalle.set(false);
+      },
+      error: () => this.cargandoDetalle.set(false)
     });
   }
 }

@@ -1,8 +1,8 @@
 namespace MiniMarket.Application.DTOs;
 
 public record CajaDto(
-    int Id, int SucursalId, int UsuarioAperturaId, DateTime FechaApertura, decimal MontoInicial,
-    int? UsuarioCierreId, DateTime? FechaCierre, decimal? MontoFinalDeclarado, decimal? MontoFinalSistema,
+    int Id, int SucursalId, int UsuarioAperturaId, string UsuarioAperturaNombre, DateTime FechaApertura, decimal MontoInicial,
+    int? UsuarioCierreId, string? UsuarioCierreNombre, DateTime? FechaCierre, decimal? MontoFinalDeclarado, decimal? MontoFinalSistema,
     decimal? Diferencia, string Estado
 );
 

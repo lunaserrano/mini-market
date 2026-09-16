@@ -24,6 +24,7 @@
         <p-tag [value]="venta.estado" [severity]="venta.estado === 'COMPLETADA' ? 'success' : 'danger'" />
       </td>
       <td>
+        <p-button icon="pi pi-eye" [text]="true" (onClick)="verDetalle(venta)" pTooltip="Ver detalle" />
         @if (venta.estado === 'COMPLETADA' && authService.tienePermiso('admin', 'supervisor')) {
           <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="abrirAnular(venta)" />
         }
@@ -40,11 +41,72 @@
 </p-table>
 
 <p-dialog header="Anular venta" [(visible)]="mostrarAnular" [modal]="true" [style]="{ width: '22rem' }">
-  <div class="flex flex-col gap-1">
-    <label class="text-sm">Motivo de anulación</label>
-    <input pInputText [(ngModel)]="motivoAnulacion" />
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Motivo de anulación</label>
+      <input pInputText [(ngModel)]="motivoAnulacion" />
+    </div>
+    <div class="flex items-center gap-2">
+      <p-checkbox [(ngModel)]="restituirStock" [binary]="true" inputId="restituirStock" />
+      <label for="restituirStock" class="text-sm">Regresar los productos al inventario</label>
+    </div>
   </div>
   <ng-template #footer>
     <p-button label="Anular" icon="pi pi-check" severity="danger" (onClick)="confirmarAnular()" />
   </ng-template>
+</p-dialog>
+
+<p-dialog header="Detalle de venta" [(visible)]="mostrarDetalle" [modal]="true" [style]="{ width: '40rem' }">
+  @if (cargandoDetalle()) {
+    <p class="text-center text-surface-400 py-6">Cargando...</p>
+  } @else if (ventaDetalle(); as venta) {
+    <div class="flex flex-col gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p class="text-sm text-surface-500">Folio #{{ venta.folio }} · {{ venta.fecha | date: 'short' }}</p>
+          <p class="text-sm text-surface-500">Cliente: {{ venta.clienteId ? venta.clienteId : 'Consumidor final' }}</p>
+        </div>
+        <p-tag [value]="venta.estado" [severity]="venta.estado === 'COMPLETADA' ? 'success' : 'danger'" />
+      </div>
+
+      <p-table [value]="venta.detalles" styleClass="p-datatable-sm">
+        <ng-template #header>
+          <tr>
+            <th>Producto</th>
+            <th>Presentación</th>
+            <th>Cantidad</th>
+            <th>Precio</th>
+            <th>Descuento</th>
+            <th>Subtotal</th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-linea>
+          <tr>
+            <td>{{ linea.productoNombre }}</td>
+            <td>{{ linea.tipoPrecioNombre }}</td>
+            <td>{{ linea.cantidad }}</td>
+            <td>{{ linea.precioUnitario | moneda }}</td>
+            <td>{{ linea.descuento | moneda }}</td>
+            <td>{{ linea.subtotal | moneda }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <div>
+        <p class="text-sm font-semibold mb-1">Pagos</p>
+        <ul class="text-sm flex flex-col gap-1">
+          @for (pago of venta.pagos; track $index) {
+            <li>{{ pago.metodo }} — {{ pago.monto | moneda }}@if (pago.referencia) { ({{ pago.referencia }}) }</li>
+          }
+        </ul>
+      </div>
+
+      <div class="flex flex-col items-end gap-1 text-sm border-t border-surface-200 dark:border-surface-700 pt-2">
+        <p>Subtotal: {{ venta.subtotal | moneda }}</p>
+        <p>Descuento: {{ venta.descuentoTotal | moneda }}</p>
+        <p>Impuesto: {{ venta.impuestoTotal | moneda }}</p>
+        <p class="font-semibold text-base">Total: {{ venta.total | moneda }}</p>
+      </div>
+    </div>
+  }
 </p-dialog>

@@ -30,8 +30,8 @@ public class CompraRepository : ICompraRepository
     public async Task CrearDetalleAsync(DetalleCompra detalle, IDbTransaction transaction)
     {
         const string sql = """
-            INSERT INTO DetalleCompra (CompraId, ProductoId, Cantidad, CantidadBaseCalculada, CostoUnitario, Subtotal)
-            VALUES (@CompraId, @ProductoId, @Cantidad, @CantidadBaseCalculada, @CostoUnitario, @Subtotal)
+            INSERT INTO DetalleCompra (CompraId, ProductoId, TipoPrecioId, Cantidad, CantidadBaseCalculada, CostoUnitario, Subtotal)
+            VALUES (@CompraId, @ProductoId, @TipoPrecioId, @Cantidad, @CantidadBaseCalculada, @CostoUnitario, @Subtotal)
             """;
         await transaction.Connection!.ExecuteAsync(sql, detalle, transaction);
     }
@@ -58,9 +58,11 @@ public class CompraRepository : ICompraRepository
         if (compra is null) return null;
 
         const string detalleSql = """
-            SELECT d.ProductoId, p.Nombre AS ProductoNombre, d.Cantidad, d.CantidadBaseCalculada, d.CostoUnitario, d.Subtotal
+            SELECT d.ProductoId, p.Nombre AS ProductoNombre, d.TipoPrecioId, tp.Nombre AS TipoPrecioNombre,
+                   d.Cantidad, d.CantidadBaseCalculada, d.CostoUnitario, d.Subtotal
             FROM DetalleCompra d
             INNER JOIN Producto p ON p.Id = d.ProductoId
+            LEFT JOIN TipoPrecio tp ON tp.Id = d.TipoPrecioId
             WHERE d.CompraId = @id
             """;
         var detalles = await connection.QueryAsync<DetalleCompraDto>(detalleSql, new { id });

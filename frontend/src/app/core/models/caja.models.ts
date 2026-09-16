@@ -2,9 +2,11 @@ export interface Caja {
   id: number;
   sucursalId: number;
   usuarioAperturaId: number;
+  usuarioAperturaNombre: string;
   fechaApertura: string;
   montoInicial: number;
   usuarioCierreId?: number | null;
+  usuarioCierreNombre?: string | null;
   fechaCierre?: string | null;
   montoFinalDeclarado?: number | null;
   montoFinalSistema?: number | null;

@@ -39,7 +39,7 @@ public class CompraService
 
         var sucursalId = _tenant.SucursalId.Value;
         // El impuesto de compra se deja en 0 en este esqueleto (ver decisión abierta #1 del plan de arquitectura).
-        decimal subtotal = request.Detalles.Sum(d => d.CostoUnitario * d.Cantidad);
+        decimal subtotal = request.Detalles.Sum(d => d.CostoUnidadMedida * d.Cantidad);
 
         using var uow = _unitOfWorkFactory.Create();
 
@@ -62,8 +62,12 @@ public class CompraService
         {
             var producto = await _productoRepository.ObtenerEntidadAsync(_tenant.EmpresaId, d.ProductoId)
                 ?? throw new EntidadNoEncontradaException("Producto", d.ProductoId);
+            // Presentación real del producto (mismo catálogo que usan las Ventas) resuelta en el
+            // servidor — el cliente ya no puede mandar un factor de conversión inventado.
+            var tipoPrecio = await _productoRepository.ObtenerTipoPrecioAsync(d.ProductoId, d.TipoPrecioId)
+                ?? throw new EntidadNoEncontradaException("TipoPrecio", d.TipoPrecioId);
 
-            var cantidadBase = d.Cantidad * d.CantidadBase;
+            var cantidadBase = d.Cantidad * tipoPrecio.CantidadBase;
             var inventario = await _inventarioRepository.ObtenerParaActualizarAsync(d.ProductoId, sucursalId, uow.Transaction);
             var stockActual = inventario?.StockActual ?? 0;
             var nuevoStock = stockActual + cantidadBase;
@@ -98,11 +102,16 @@ public class CompraService
             {
                 CompraId = compra.Id,
                 ProductoId = d.ProductoId,
+                TipoPrecioId = tipoPrecio.Id,
                 Cantidad = d.Cantidad,
                 CantidadBaseCalculada = cantidadBase,
-                CostoUnitario = d.CostoUnitario,
-                Subtotal = d.CostoUnitario * d.Cantidad
+                CostoUnitario = d.CostoUnidadMedida,
+                Subtotal = d.CostoUnidadMedida * d.Cantidad
             }, uow.Transaction);
+
+            // Deja el costo de referencia de esta presentación al día con el último precio pagado,
+            // para que la siguiente compra (o el formulario de Productos) ya lo sugiera solo.
+            await _productoRepository.ActualizarPrecioCompraAsync(tipoPrecio.Id, d.CostoUnidadMedida, uow.Transaction);
         }
 
         uow.Commit();

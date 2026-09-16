@@ -18,18 +18,18 @@ public class CajaService
         _tenant = tenant;
     }
 
-    private static CajaDto Mapear(Caja c) => new(
-        c.Id, c.SucursalId, c.UsuarioAperturaId, c.FechaApertura, c.MontoInicial,
-        c.UsuarioCierreId, c.FechaCierre, c.MontoFinalDeclarado, c.MontoFinalSistema, c.Diferencia, c.Estado);
+    private static CajaDto Mapear(Caja c, string usuarioAperturaNombre, string? usuarioCierreNombre) => new(
+        c.Id, c.SucursalId, c.UsuarioAperturaId, usuarioAperturaNombre, c.FechaApertura, c.MontoInicial,
+        c.UsuarioCierreId, usuarioCierreNombre, c.FechaCierre, c.MontoFinalDeclarado, c.MontoFinalSistema, c.Diferencia, c.Estado);
 
     public async Task<CajaDto?> ObtenerActualAsync()
     {
         var caja = await _repository.ObtenerAbiertaPorUsuarioAsync(_tenant.EmpresaId, _tenant.UsuarioId);
-        return caja is null ? null : Mapear(caja);
+        return caja is null ? null : Mapear(caja, string.Empty, null);
     }
 
-    public async Task<IReadOnlyList<CajaDto>> ListarAsync(int? sucursalId) =>
-        (await _repository.ListarAsync(_tenant.EmpresaId, sucursalId)).Select(Mapear).ToList();
+    public Task<IReadOnlyList<CajaDto>> ListarAsync(int? sucursalId) =>
+        _repository.ListarAsync(_tenant.EmpresaId, sucursalId);
 
     public async Task<CajaDto> AbrirAsync(AperturaCajaRequest request)
     {
@@ -50,7 +50,7 @@ public class CajaService
             Estado = "ABIERTA"
         };
         caja.Id = await _repository.AbrirAsync(caja);
-        return Mapear(caja);
+        return Mapear(caja, string.Empty, null);
     }
 
     public async Task<CajaDto> CerrarAsync(int cajaId, CierreCajaRequest request)
@@ -72,7 +72,7 @@ public class CajaService
         caja.Estado = "CERRADA";
 
         await _repository.CerrarAsync(caja);
-        return Mapear(caja);
+        return Mapear(caja, string.Empty, null);
     }
 
     public async Task<int> RegistrarMovimientoAsync(int cajaId, MovimientoCajaCreateDto dto)

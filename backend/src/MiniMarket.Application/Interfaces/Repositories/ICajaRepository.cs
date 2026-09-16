@@ -1,4 +1,5 @@
 using System.Data;
+using MiniMarket.Application.DTOs;
 using MiniMarket.Domain.Entities;
 
 namespace MiniMarket.Application.Interfaces.Repositories;
@@ -7,7 +8,8 @@ public interface ICajaRepository
 {
     Task<Caja?> ObtenerAbiertaPorUsuarioAsync(int empresaId, int usuarioId);
     Task<Caja?> ObtenerPorIdAsync(int empresaId, int id);
-    Task<IReadOnlyList<Caja>> ListarAsync(int empresaId, int? sucursalId);
+    /// <summary>Historial de cajas (abiertas y cerradas) con nombres de usuario resueltos, para listados/reportes.</summary>
+    Task<IReadOnlyList<CajaDto>> ListarAsync(int empresaId, int? sucursalId);
     Task<int> AbrirAsync(Caja caja);
     Task CerrarAsync(Caja caja);
 

@@ -14,6 +14,12 @@ export class CajaService {
     return this.http.get<Caja>(`${this.baseUrl}/actual`);
   }
 
+  listar(sucursalId?: number): Observable<Caja[]> {
+    const params: Record<string, number> = {};
+    if (sucursalId) params['sucursalId'] = sucursalId;
+    return this.http.get<Caja[]>(this.baseUrl, { params });
+  }
+
   abrir(montoInicial: number): Observable<Caja> {
     return this.http.post<Caja>(`${this.baseUrl}/apertura`, { montoInicial });
   }
