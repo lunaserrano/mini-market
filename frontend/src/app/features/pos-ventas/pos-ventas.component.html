@@ -129,7 +129,7 @@
     @if (puedeElegirCliente) {
       <div class="flex flex-col gap-1">
         <label class="text-xs">Cliente</label>
-        <p-select appendTo="body"
+        <p-select
           [ngModel]="clienteId"
           (ngModelChange)="cambiarCliente($event)"
           [options]="clientes()"
@@ -162,7 +162,7 @@
       <div class="flex gap-2 items-end">
         <div class="flex flex-col gap-1 flex-1">
           <label class="text-xs">Método</label>
-          <p-select appendTo="body" [(ngModel)]="pago.metodo" [options]="metodosPago" optionLabel="label" optionValue="value" styleClass="w-full" />
+          <p-select [(ngModel)]="pago.metodo" [options]="metodosPago" optionLabel="label" optionValue="value" styleClass="w-full" />
         </div>
         <div class="flex flex-col gap-1 flex-1">
           <label class="text-xs">Monto</label>
