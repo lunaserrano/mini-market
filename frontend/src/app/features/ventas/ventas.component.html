@@ -21,11 +21,16 @@
       <td>{{ venta.clienteNombre ?? 'Consumidor final' }}</td>
       <td>{{ venta.total | moneda }}</td>
       <td>
-        <p-tag [value]="venta.estado" [severity]="venta.estado === 'COMPLETADA' ? 'success' : 'danger'" />
+        <div class="flex items-center gap-1">
+          <p-tag [value]="venta.estado" [severity]="venta.estado === 'COMPLETADA' ? 'success' : 'danger'" />
+          @if (venta.saldoCredito != null) {
+            <p-tag [value]="'Debe ' + (venta.saldoCredito | moneda)" severity="warn" icon="pi pi-credit-card" />
+          }
+        </div>
       </td>
       <td>
         <p-button icon="pi pi-eye" [text]="true" (onClick)="verDetalle(venta)" pTooltip="Ver detalle" />
-        @if (venta.estado === 'COMPLETADA' && authService.tienePermiso('admin', 'supervisor')) {
+        @if (venta.estado === 'COMPLETADA' && authService.tienePermiso('ventas.anular')) {
           <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="abrirAnular(venta)" />
         }
       </td>

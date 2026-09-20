@@ -9,11 +9,22 @@ export interface UsuarioActual {
   sucursalId: number | null;
   nombreCompleto: string;
   username: string;
-  rol: 'admin' | 'supervisor' | 'cajero';
+  /** Código del rol (informativo: los accesos se deciden por `permisos`). */
+  rol: string;
+  rolNombre: string;
+  permisos: string[];
+  debeCambiarPassword: boolean;
 }
 
 export interface LoginResponse {
   token: string;
   expiraUtc: string;
+  refreshToken: string;
+  refreshExpiraUtc: string;
   usuario: UsuarioActual;
+}
+
+export interface CambiarPasswordRequest {
+  passwordActual: string;
+  passwordNueva: string;
 }

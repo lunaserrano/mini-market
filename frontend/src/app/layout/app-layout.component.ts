@@ -26,15 +26,18 @@ import { MENU_ITEMS } from './menu-items';
           }
         </div>
         <nav class="flex-1 overflow-y-auto py-2">
-          @for (item of menuVisible(); track item.route) {
+          @for (entrada of menuVisible(); track entrada.item.route) {
+            @if (entrada.encabezado && sidebarAbierto()) {
+              <p class="px-6 pt-4 pb-1 m-0 text-xs font-semibold uppercase tracking-wide text-surface-400">{{ entrada.encabezado }}</p>
+            }
             <a
-              [routerLink]="item.route"
+              [routerLink]="entrada.item.route"
               routerLinkActive="bg-primary-50 dark:bg-primary-900/40 text-primary"
               class="flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 no-underline"
             >
-              <i [class]="item.icon"></i>
+              <i [class]="entrada.item.icon"></i>
               @if (sidebarAbierto()) {
-                <span class="whitespace-nowrap">{{ item.label }}</span>
+                <span class="whitespace-nowrap">{{ entrada.item.label }}</span>
               }
             </a>
           }
@@ -49,9 +52,12 @@ import { MENU_ITEMS } from './menu-items';
           <p-button icon="pi pi-bars" [text]="true" [rounded]="true" (onClick)="sidebarAbierto.set(!sidebarAbierto())" />
           <div class="flex items-center gap-3">
             <span class="text-sm text-surface-600 dark:text-surface-300">
-              {{ usuario()?.nombreCompleto }} · <span class="capitalize">{{ usuario()?.rol }}</span>
+              {{ usuario()?.nombreCompleto }} · {{ usuario()?.rolNombre }}
             </span>
-            <p-button icon="pi pi-sign-out" [text]="true" [rounded]="true" severity="secondary" (onClick)="authService.logout()" />
+            <a routerLink="/auth/cambiar-password" title="Cambiar contraseña">
+              <p-button icon="pi pi-key" [text]="true" [rounded]="true" severity="secondary" />
+            </a>
+            <p-button icon="pi pi-sign-out" title="Cerrar sesión" [text]="true" [rounded]="true" severity="secondary" (onClick)="authService.logout()" />
           </div>
         </header>
         <main class="flex-1 overflow-y-auto p-4">
@@ -64,9 +70,13 @@ import { MENU_ITEMS } from './menu-items';
 export class AppLayoutComponent implements OnInit {
   readonly sidebarAbierto = signal(true);
   readonly usuario = computed(() => this.authService.usuario());
+  /** Entradas del menú que el usuario puede ver según sus permisos, con el encabezado de sección donde empieza cada una. */
   readonly menuVisible = computed(() => {
-    const rol = this.usuario()?.rol;
-    return MENU_ITEMS.filter((item) => !!rol && item.roles.includes(rol));
+    const visibles = MENU_ITEMS.filter((item) => this.authService.tienePermiso(...item.permisos));
+    return visibles.map((item, i) => ({
+      item,
+      encabezado: item.seccion && item.seccion !== visibles[i - 1]?.seccion ? item.seccion : null
+    }));
   });
 
   constructor(

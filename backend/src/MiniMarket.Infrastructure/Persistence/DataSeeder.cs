@@ -1,5 +1,7 @@
 using Dapper;
 using MiniMarket.Application.Interfaces;
+using MiniMarket.Domain.Entities;
+using MiniMarket.Domain.Security;
 
 namespace MiniMarket.Infrastructure.Persistence;
 
@@ -33,10 +35,30 @@ public static class DataSeeder
             VALUES (@empresaId, 'Sucursal Principal', 'San Salvador', 'A')
             """, new { empresaId });
 
-        foreach (var (codigo, nombre) in new[] { ("admin", "Administrador"), ("supervisor", "Supervisor"), ("cajero", "Cajero") })
-            await connection.ExecuteAsync("INSERT INTO RolCatalogo (Codigo, Nombre) VALUES (@codigo, @nombre)", new { codigo, nombre });
+        // Roles de sistema por empresa. El admin no lleva filas en RolPermiso (siempre tiene todos los permisos);
+        // supervisor y cajero reciben su conjunto por defecto (requiere que PermisoCatalogSync ya haya corrido).
+        var rolesBase = new[]
+        {
+            (Codigo: RolCatalogo.CodigoAdmin, Nombre: "Administrador", Descripcion: "Acceso total al sistema. No editable."),
+            (Codigo: RolCatalogo.CodigoSupervisor, Nombre: "Supervisor", Descripcion: "Gestión operativa: catálogo, inventario, compras y anulaciones."),
+            (Codigo: RolCatalogo.CodigoCajero, Nombre: "Cajero", Descripcion: "Punto de venta y operación de caja.")
+        };
+        var rolAdminId = 0;
+        foreach (var (codigo, nombre, descripcion) in rolesBase)
+        {
+            var rolId = await connection.QuerySingleAsync<int>("""
+                INSERT INTO RolCatalogo (EmpresaId, Codigo, Nombre, Descripcion, EsSistema)
+                OUTPUT INSERTED.Id
+                VALUES (@empresaId, @codigo, @nombre, @descripcion, 1)
+                """, new { empresaId, codigo, nombre, descripcion });
 
-        var rolAdminId = await connection.QuerySingleAsync<int>("SELECT Id FROM RolCatalogo WHERE Codigo = 'admin'");
+            if (codigo == RolCatalogo.CodigoAdmin) rolAdminId = rolId;
+
+            if (Permisos.PorDefecto.TryGetValue(codigo, out var permisos))
+                await connection.ExecuteAsync(
+                    "INSERT INTO RolPermiso (RolId, PermisoId) SELECT @rolId, Id FROM Permiso WHERE Codigo IN @permisos",
+                    new { rolId, permisos });
+        }
 
         var adminHash = passwordHasher.Hash("Admin123!");
         await connection.ExecuteAsync("""

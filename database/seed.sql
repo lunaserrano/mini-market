@@ -14,14 +14,17 @@ VALUES ('Mini Market Demo', 'Mini Market Demo, S.A. de C.V.', 'America/El_Salvad
 INSERT INTO Sucursal (EmpresaId, Nombre, Direccion, Estado)
 VALUES (1, 'Sucursal Principal', 'San Salvador', 'A');
 
-INSERT INTO RolCatalogo (Codigo, Nombre) VALUES
-('admin', 'Administrador'),
-('supervisor', 'Supervisor'),
-('cajero', 'Cajero');
+-- Roles de sistema por empresa (EsSistema = 1). El admin no lleva filas en RolPermiso: siempre tiene todo el catálogo.
+-- Los permisos por defecto de supervisor y cajero (RolPermiso) los asigna DataSeeder desde Domain/Security/Permisos.cs
+-- (Permisos.PorDefecto) una vez que PermisoCatalogSync ha poblado la tabla Permiso al arrancar la Api.
+INSERT INTO RolCatalogo (EmpresaId, Codigo, Nombre, Descripcion, EsSistema) VALUES
+(1, 'admin', 'Administrador', 'Acceso total al sistema. No editable.', 1),
+(1, 'supervisor', 'Supervisor', 'Gestión operativa: catálogo, inventario, compras y anulaciones.', 1),
+(1, 'cajero', 'Cajero', 'Punto de venta y operación de caja.', 1);
 
 -- Usuario admin: ver DataSeeder.cs para el hash real generado con BCrypt en tiempo de ejecución.
 -- INSERT INTO Usuario (EmpresaId, SucursalId, RolId, NombreCompleto, Username, PasswordHash, Estado)
--- VALUES (1, 1, 1, 'Administrador General', 'admin', '<bcrypt-hash>', 'A');
+-- VALUES (1, 1, 1, 'Administrador General', 'admin', '<bcrypt-hash>', 'A');   -- RolId = Id del rol admin de la empresa
 
 INSERT INTO Categoria (EmpresaId, Nombre, Descripcion, Estado) VALUES
 (1, 'Abarrotes', 'Productos de abarrotes en general', 'A'),

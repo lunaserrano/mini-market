@@ -32,13 +32,24 @@ public class Sucursal
     public DateTime FechaCreacion { get; set; }
 }
 
-/// <summary>Catálogo de roles (fix #5: antes era texto libre en Usuario.rol sin validación).</summary>
-public class RolCatalogo
+/// <summary>
+/// Rol de una empresa. Los 3 roles base (admin/supervisor/cajero) se crean por empresa con EsSistema=true
+/// y no se pueden eliminar; el resto los crea el administrador desde la UI. Los permisos del rol
+/// viven en RolPermiso. El rol de sistema "admin" no tiene filas: siempre tiene todo el catálogo.
+/// </summary>
+public class RolCatalogo : CatalogoEntity
 {
-    public int Id { get; set; }
-    /// <summary>Código estable usado en claims JWT y en código: "admin" | "supervisor" | "cajero".</summary>
+    public const string CodigoAdmin = "admin";
+    public const string CodigoSupervisor = "supervisor";
+    public const string CodigoCajero = "cajero";
+
+    /// <summary>Código estable usado en claims JWT y en código (slug del nombre en roles personalizados).</summary>
     public string Codigo { get; set; } = string.Empty;
     public string Nombre { get; set; } = string.Empty;
+    public string? Descripcion { get; set; }
+    public bool EsSistema { get; set; }
+
+    public bool EsAdministrador => EsSistema && Codigo == CodigoAdmin;
 }
 
 public class Usuario : CatalogoEntity
@@ -49,4 +60,12 @@ public class Usuario : CatalogoEntity
     public string NombreCompleto { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+
+    public int IntentosFallidos { get; set; }
+    public DateTime? BloqueadoHasta { get; set; }
+    public bool DebeCambiarPassword { get; set; }
+    public DateTime? UltimoLoginUtc { get; set; }
+    public DateTime? PasswordCambiadaUtc { get; set; }
+
+    public bool EstaBloqueado(DateTime ahoraUtc) => BloqueadoHasta is DateTime hasta && hasta > ahoraUtc;
 }

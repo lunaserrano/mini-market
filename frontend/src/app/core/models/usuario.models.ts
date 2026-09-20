@@ -3,8 +3,14 @@ export interface Usuario {
   sucursalId?: number | null;
   nombreCompleto: string;
   username: string;
-  rol: 'admin' | 'supervisor' | 'cajero';
+  rolId: number;
+  rol: string;
+  rolNombre: string;
   estado: 'A' | 'I';
+  bloqueado: boolean;
+  bloqueadoHasta: string | null;
+  debeCambiarPassword: boolean;
+  ultimoLoginUtc: string | null;
 }
 
 export interface UsuarioCreate {
@@ -12,11 +18,12 @@ export interface UsuarioCreate {
   nombreCompleto: string;
   username: string;
   password: string;
-  rol: 'admin' | 'supervisor' | 'cajero';
+  rolId: number | null;
+  debeCambiarPassword: boolean;
 }
 
 export interface UsuarioUpdate {
   sucursalId?: number | null;
   nombreCompleto: string;
-  rol: 'admin' | 'supervisor' | 'cajero';
+  rolId: number;
 }

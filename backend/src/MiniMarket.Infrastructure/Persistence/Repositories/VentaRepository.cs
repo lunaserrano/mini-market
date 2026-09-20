@@ -97,9 +97,11 @@ public class VentaRepository : IVentaRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         const string sql = """
-            SELECT v.Id, v.Folio, v.Fecha, c.Nombre AS ClienteNombre, v.Total, v.Estado
+            SELECT v.Id, v.Folio, v.Fecha, c.Nombre AS ClienteNombre, v.Total, v.Estado,
+                   CASE WHEN cr.Estado = 'PENDIENTE' THEN cr.SaldoPendiente END AS SaldoCredito
             FROM Venta v
             LEFT JOIN Cliente c ON c.Id = v.ClienteId
+            LEFT JOIN Credito cr ON cr.VentaId = v.Id
             WHERE v.EmpresaId = @empresaId
               AND (@sucursalId IS NULL OR v.SucursalId = @sucursalId)
               AND (@usuarioId IS NULL OR v.UsuarioId = @usuarioId)

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MiniMarket.Api.Authorization;
 using MiniMarket.Application.DTOs;
 using MiniMarket.Application.Services;
+using MiniMarket.Domain.Security;
 
 namespace MiniMarket.Api.Controllers;
 
@@ -19,6 +21,6 @@ public class EmpresaController : ControllerBase
     public async Task<ActionResult<EmpresaDto>> ObtenerActual() => Ok(await _service.ObtenerActualAsync());
 
     [HttpPut]
-    [Authorize(Roles = "admin")]
+    [HasPermission(Permisos.EmpresaEditar)]
     public async Task<ActionResult<EmpresaDto>> Actualizar(EmpresaUpdateDto dto) => Ok(await _service.ActualizarAsync(dto));
 }

@@ -34,7 +34,7 @@
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1">
       <label class="text-sm">Proveedor</label>
-      <p-select [(ngModel)]="proveedorId" [options]="proveedores()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" />
+      <p-select appendTo="body" [(ngModel)]="proveedorId" [options]="proveedores()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Número de documento del proveedor</label>
@@ -62,7 +62,7 @@
       }
       @for (linea of detalles; track $index) {
         <div class="grid grid-cols-12 gap-2 items-center mb-2">
-          <p-select
+          <p-select appendTo="body"
             class="col-span-3"
             [ngModel]="linea.productoId"
             (ngModelChange)="onProductoChange(linea, $event)"
@@ -73,7 +73,7 @@
             styleClass="w-full"
             [filter]="true"
           />
-          <p-select
+          <p-select appendTo="body"
             class="col-span-3"
             [ngModel]="linea.tipoPrecioId"
             (ngModelChange)="onTipoPrecioChange(linea, $event)"

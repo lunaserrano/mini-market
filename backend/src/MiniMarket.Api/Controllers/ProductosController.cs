@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MiniMarket.Api.Authorization;
 using MiniMarket.Application.DTOs;
 using MiniMarket.Application.Services;
+using MiniMarket.Domain.Security;
 
 namespace MiniMarket.Api.Controllers;
 
@@ -15,20 +17,20 @@ public class ProductosController : ControllerBase
     public ProductosController(ProductoService service) => _service = service;
 
     [HttpGet]
-    [Authorize(Roles = "admin,supervisor,cajero")]
+    [HasPermission(Permisos.ProductosVer)]
     public async Task<ActionResult<IReadOnlyList<ProductoDto>>> Listar() => Ok(await _service.ListarAsync());
 
     [HttpGet("buscar")]
-    [Authorize(Roles = "admin,supervisor,cajero")]
+    [HasPermission(Permisos.ProductosVer)]
     public async Task<ActionResult<IReadOnlyList<ProductoPosDto>>> Buscar([FromQuery] string termino) =>
         Ok(await _service.BuscarParaPosAsync(termino));
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,supervisor,cajero")]
+    [HasPermission(Permisos.ProductosVer)]
     public async Task<ActionResult<ProductoDto>> Obtener(int id) => Ok(await _service.ObtenerAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "admin,supervisor")]
+    [HasPermission(Permisos.ProductosGestionar)]
     public async Task<ActionResult<int>> Crear(ProductoCreateDto dto)
     {
         var id = await _service.CrearAsync(dto);
@@ -36,7 +38,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,supervisor")]
+    [HasPermission(Permisos.ProductosGestionar)]
     public async Task<IActionResult> Actualizar(int id, ProductoUpdateDto dto)
     {
         await _service.ActualizarAsync(id, dto);
@@ -44,7 +46,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [HasPermission(Permisos.ProductosEliminar)]
     public async Task<IActionResult> Desactivar(int id)
     {
         await _service.DesactivarAsync(id);
@@ -52,12 +54,12 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPost("{productoId:int}/tipos-precio")]
-    [Authorize(Roles = "admin,supervisor")]
+    [HasPermission(Permisos.ProductosGestionar)]
     public async Task<ActionResult<int>> AgregarTipoPrecio(int productoId, TipoPrecioCreateDto dto) =>
         Ok(await _service.AgregarTipoPrecioAsync(productoId, dto));
 
     [HttpPut("{productoId:int}/tipos-precio/{tipoPrecioId:int}")]
-    [Authorize(Roles = "admin,supervisor")]
+    [HasPermission(Permisos.ProductosGestionar)]
     public async Task<IActionResult> ActualizarTipoPrecio(int productoId, int tipoPrecioId, TipoPrecioUpdateDto dto)
     {
         await _service.ActualizarTipoPrecioAsync(productoId, tipoPrecioId, dto);
@@ -65,7 +67,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpDelete("{productoId:int}/tipos-precio/{tipoPrecioId:int}")]
-    [Authorize(Roles = "admin,supervisor")]
+    [HasPermission(Permisos.ProductosGestionar)]
     public async Task<IActionResult> EliminarTipoPrecio(int productoId, int tipoPrecioId)
     {
         await _service.EliminarTipoPrecioAsync(productoId, tipoPrecioId);

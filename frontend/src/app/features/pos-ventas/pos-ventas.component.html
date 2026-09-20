@@ -61,6 +61,7 @@
                 class="mm-input-number w-20 text-center"
                 [ngModel]="linea.cantidad"
                 (ngModelChange)="actualizarCantidad(linea, $event)"
+                (blur)="restaurarCantidad(linea, $event)"
               />
             </td>
             <td>{{ linea.precioUnitario | moneda }}</td>
@@ -125,15 +126,47 @@
   <div class="flex flex-col gap-3">
     <p class="text-lg font-bold text-center">Total a pagar: {{ total() | moneda }}</p>
 
+    @if (puedeElegirCliente) {
+      <div class="flex flex-col gap-1">
+        <label class="text-xs">Cliente</label>
+        <p-select appendTo="body"
+          [ngModel]="clienteId"
+          (ngModelChange)="cambiarCliente($event)"
+          [options]="clientes()"
+          optionLabel="nombre"
+          optionValue="id"
+          placeholder="Consumidor final"
+          [showClear]="true"
+          [filter]="true"
+          filterBy="nombre"
+          styleClass="w-full"
+        />
+      </div>
+    }
+
+    @if (puedeVenderACredito && clienteId !== null) {
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" [ngModel]="alCredito" (ngModelChange)="alternarCredito($event)" />
+        Vender a crédito (el cliente paga después)
+      </label>
+      @if (alCredito) {
+        <div class="flex flex-col gap-1">
+          <label class="text-xs">Fecha límite de pago (opcional)</label>
+          <input type="date" pInputText [min]="hoy" [(ngModel)]="fechaVencimiento" />
+        </div>
+        <p class="text-xs text-surface-500">Indica abajo lo que el cliente paga ahora (puede ser 0); el resto quedará como deuda.</p>
+      }
+    }
+
     @for (pago of pagos; track $index) {
       <div class="flex gap-2 items-end">
         <div class="flex flex-col gap-1 flex-1">
           <label class="text-xs">Método</label>
-          <p-select [(ngModel)]="pago.metodo" [options]="metodosPago" optionLabel="label" optionValue="value" styleClass="w-full" />
+          <p-select appendTo="body" [(ngModel)]="pago.metodo" [options]="metodosPago" optionLabel="label" optionValue="value" styleClass="w-full" />
         </div>
         <div class="flex flex-col gap-1 flex-1">
           <label class="text-xs">Monto</label>
-          <input type="number" min="0" step="0.01" class="mm-input-number" [(ngModel)]="pago.monto" />
+          <input type="number" min="0" step="0.01" appDosDecimales class="mm-input-number" [(ngModel)]="pago.monto" />
         </div>
         <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarLineaPago($index)" />
       </div>
@@ -141,24 +174,38 @@
 
     <p-button label="Agregar otro método de pago" icon="pi pi-plus" [text]="true" (onClick)="agregarLineaPago()" />
 
-    <div class="flex justify-between text-sm border-t border-surface-200 dark:border-surface-700 pt-2">
-      <span>Total pagado</span>
-      <span [class.text-red-500]="totalPagado() < total()" [class.text-green-600]="totalPagado() >= total()">
-        {{ totalPagado() | moneda }}
-      </span>
-    </div>
-    @if (totalPagado() < total()) {
-      <p class="text-xs text-red-500 text-right">Faltan {{ total() - totalPagado() | moneda }}</p>
-    } @else if (totalPagado() > total()) {
-      <p class="text-xs text-surface-400 text-right">Vuelto: {{ totalPagado() - total() | moneda }}</p>
+    @if (alCredito) {
+      <div class="flex justify-between text-sm border-t border-surface-200 dark:border-surface-700 pt-2">
+        <span>Paga ahora</span>
+        <span>{{ totalPagado() | moneda }}</span>
+      </div>
+      <div class="flex justify-between text-sm font-semibold">
+        <span>Quedará a crédito</span>
+        <span [class.text-red-500]="saldoCredito() <= 0.005" [class.text-amber-600]="saldoCredito() > 0.005">{{ saldoCredito() | moneda }}</span>
+      </div>
+      @if (saldoCredito() <= 0.005) {
+        <p class="text-xs text-red-500 text-right">Los pagos ya cubren el total: reduce el pago o desmarca la venta a crédito.</p>
+      }
+    } @else {
+      <div class="flex justify-between text-sm border-t border-surface-200 dark:border-surface-700 pt-2">
+        <span>Total pagado</span>
+        <span [class.text-red-500]="totalPagado() < total()" [class.text-green-600]="totalPagado() >= total()">
+          {{ totalPagado() | moneda }}
+        </span>
+      </div>
+      @if (totalPagado() < total()) {
+        <p class="text-xs text-red-500 text-right">Faltan {{ total() - totalPagado() | moneda }}</p>
+      } @else if (totalPagado() > total()) {
+        <p class="text-xs text-surface-400 text-right">Vuelto: {{ totalPagado() - total() | moneda }}</p>
+      }
     }
   </div>
   <ng-template #footer>
     <p-button
-      label="Confirmar venta"
+      [label]="alCredito ? 'Confirmar venta a crédito' : 'Confirmar venta'"
       icon="pi pi-check"
       [loading]="procesandoVenta()"
-      [disabled]="totalPagado() < total()"
+      [disabled]="!puedeConfirmar()"
       (onClick)="confirmarVenta()"
     />
   </ng-template>

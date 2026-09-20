@@ -14,7 +14,11 @@ export interface PagoVentaCreate {
 export interface VentaCreate {
   clienteId?: number | null;
   detalles: DetalleVentaCreate[];
+  /** Con `alCredito`, puede venir vacío o cubrir solo una parte: lo que falte queda como deuda del cliente. */
   pagos: PagoVentaCreate[];
+  alCredito?: boolean;
+  /** Día límite de pago (yyyy-MM-dd). Solo aplica con `alCredito`. */
+  fechaVencimiento?: string | null;
 }
 
 export interface DetalleVenta {
@@ -50,6 +54,8 @@ export interface VentaResumen {
   clienteNombre?: string | null;
   total: number;
   estado: 'COMPLETADA' | 'ANULADA';
+  /** Deuda vigente si la venta fue a crédito y aún está pendiente; null en cualquier otro caso. */
+  saldoCredito?: number | null;
 }
 
 /** Línea de carrito del POS, en memoria hasta que se confirma la venta. */

@@ -1,0 +1,126 @@
+<p-confirmdialog />
+
+<div class="flex justify-between items-center mb-4">
+  <div>
+    <h1 class="text-xl font-bold">Roles y permisos</h1>
+    <p class="m-0 text-sm text-surface-500">Cada rol define qué puede hacer quien lo tenga asignado.</p>
+  </div>
+  <p-button *appHasPermission="permisos.RolesGestionar" label="Nuevo rol" icon="pi pi-plus" (onClick)="nuevo()" />
+</div>
+
+<p-table [value]="roles()" [loading]="cargando()" styleClass="p-datatable-sm">
+  <ng-template #header>
+    <tr>
+      <th>Rol</th>
+      <th>Descripción</th>
+      <th>Tipo</th>
+      <th class="text-right">Usuarios</th>
+      <th class="text-right">Permisos</th>
+      <th style="width: 110px"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-rol>
+    <tr>
+      <td class="font-medium">{{ rol.nombre }}</td>
+      <td class="text-sm text-surface-500">{{ rol.descripcion }}</td>
+      <td>
+        @if (rol.esSistema) {
+          <p-tag value="Sistema" severity="secondary" />
+        } @else {
+          <p-tag value="Personalizado" severity="info" />
+        }
+      </td>
+      <td class="text-right">{{ rol.totalUsuarios }}</td>
+      <td class="text-right">{{ rol.totalPermisos }}</td>
+      <td>
+        <div class="flex gap-1">
+          <p-button [icon]="puedeGestionar() && rol.codigo !== 'admin' ? 'pi pi-pencil' : 'pi pi-eye'" [text]="true"
+            [title]="puedeGestionar() && rol.codigo !== 'admin' ? 'Editar' : 'Ver permisos'" (onClick)="abrir(rol)" />
+          @if (!rol.esSistema) {
+            <p-button *appHasPermission="permisos.RolesGestionar" icon="pi pi-trash" [text]="true" severity="danger" title="Eliminar"
+              [disabled]="rol.totalUsuarios > 0" (onClick)="eliminar(rol)" />
+          }
+        </div>
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template #emptymessage>
+    <tr>
+      <td colspan="6" class="text-center text-surface-400 py-6">No hay roles.</td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog
+  [header]="soloLectura() ? 'Rol Administrador' : editando ? 'Editar rol' : 'Nuevo rol'"
+  [(visible)]="mostrarFormulario"
+  [modal]="true"
+  [style]="{ width: '46rem', maxWidth: '95vw' }"
+>
+  <div class="flex flex-col gap-4">
+    @if (soloLectura()) {
+      <p class="m-0 text-sm text-surface-500">
+        <i class="pi pi-lock mr-1"></i>El Administrador siempre tiene todos los permisos y no se puede modificar.
+      </p>
+    } @else if (editando && !puedeGestionar()) {
+      <p class="m-0 text-sm text-surface-500">Solo lectura: no tiene permiso para modificar roles.</p>
+    }
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Nombre</label>
+        <input pInputText [(ngModel)]="nombre" [disabled]="soloLectura() || !puedeGestionar()" maxlength="100" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Descripción</label>
+        <input pInputText [(ngModel)]="descripcion" [disabled]="soloLectura() || !puedeGestionar()" maxlength="250" />
+      </div>
+    </div>
+
+    <div>
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-base font-semibold m-0">Permisos</h2>
+        <span class="text-sm text-surface-500">{{ totalSeleccionados() }} seleccionados</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[24rem] overflow-y-auto pr-1">
+        @for (modulo of catalogo(); track modulo.modulo) {
+          <section class="border border-surface-200 dark:border-surface-700 rounded-lg p-3">
+            <div class="flex items-center gap-2 pb-2 mb-2 border-b border-surface-200 dark:border-surface-700">
+              <p-checkbox
+                [binary]="true"
+                [ngModel]="moduloCompleto(modulo)"
+                [indeterminate]="moduloParcial(modulo)"
+                [disabled]="soloLectura() || !puedeGestionar()"
+                (onChange)="alternarModulo(modulo)"
+                [inputId]="'mod-' + modulo.modulo"
+              />
+              <label [for]="'mod-' + modulo.modulo" class="font-medium text-sm cursor-pointer">{{ modulo.modulo }}</label>
+              <span class="ml-auto text-xs text-surface-400">{{ cuantosDelModulo(modulo) }}/{{ modulo.permisos.length }}</span>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              @for (permiso of modulo.permisos; track permiso.codigo) {
+                <div class="flex items-center gap-2">
+                  <p-checkbox
+                    [binary]="true"
+                    [ngModel]="marcado(permiso.codigo)"
+                    [disabled]="soloLectura() || !puedeGestionar()"
+                    (onChange)="alternar(permiso.codigo)"
+                    [inputId]="'perm-' + permiso.codigo"
+                  />
+                  <label [for]="'perm-' + permiso.codigo" class="text-sm cursor-pointer">{{ permiso.nombre }}</label>
+                </div>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    </div>
+  </div>
+
+  <ng-template #footer>
+    @if (!soloLectura() && puedeGestionar()) {
+      <p-button label="Guardar" icon="pi pi-check" [loading]="guardando()" [disabled]="!formularioValido()" (onClick)="guardar()" />
+    }
+  </ng-template>
+</p-dialog>

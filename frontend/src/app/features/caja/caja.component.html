@@ -44,7 +44,7 @@
     </p-table>
   }
 
-  @if (authService.tienePermiso('admin', 'supervisor')) {
+  @if (authService.tienePermiso('caja.ver_todas')) {
     <div class="mt-4">
       <h2 class="text-lg font-semibold mb-2">Historial de cierres</h2>
       <p-table [value]="historial()" [loading]="cargandoHistorial()" styleClass="p-datatable-sm" [paginator]="true" [rows]="10">
@@ -115,7 +115,7 @@
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1">
       <label class="text-sm">Tipo</label>
-      <p-select [(ngModel)]="nuevoMovimiento.tipo" [options]="tiposMovimiento" optionLabel="label" optionValue="value" styleClass="w-full" />
+      <p-select appendTo="body" [(ngModel)]="nuevoMovimiento.tipo" [options]="tiposMovimiento" optionLabel="label" optionValue="value" styleClass="w-full" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Concepto</label>

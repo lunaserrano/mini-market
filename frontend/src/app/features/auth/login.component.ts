@@ -5,6 +5,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
+import { rutaInicial } from '../../core/guards/permission.guard';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -67,13 +68,14 @@ export class LoginComponent {
     this.cargando.set(true);
     this.error.set(null);
     this.authService.login({ username: this.username, password: this.password }).subscribe({
-      next: () => {
+      next: (respuesta) => {
         this.cargando.set(false);
-        this.router.navigate(['/pos']);
+        // Con contraseña temporal (alta o restablecimiento por un admin) primero debe cambiarla.
+        this.router.navigate([respuesta.usuario.debeCambiarPassword ? '/auth/cambiar-password' : rutaInicial(this.authService)]);
       },
       error: (err) => {
         this.cargando.set(false);
-        this.error.set(err.error?.error ?? 'Usuario o contraseña incorrectos.');
+        this.error.set(err.error?.error ?? 'No se pudo iniciar sesión. Intente nuevamente.');
       }
     });
   }

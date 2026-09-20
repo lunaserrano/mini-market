@@ -24,7 +24,7 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="flex flex-col gap-1">
         <label class="text-sm">País / moneda sugerida</label>
-        <p-select
+        <p-select appendTo="body"
           [ngModel]="formulario.codigoMoneda"
           (ngModelChange)="formulario.codigoMoneda = $event; onMonedaSeleccionada($event)"
           [options]="monedasSugeridas"

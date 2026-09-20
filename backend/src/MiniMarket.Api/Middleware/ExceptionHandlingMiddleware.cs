@@ -31,9 +31,13 @@ public class ExceptionHandlingMiddleware
                 PagosInsuficientesException => HttpStatusCode.Conflict,
                 CajaYaAbiertaException => HttpStatusCode.Conflict,
                 CajaCerradaException => HttpStatusCode.Conflict,
+                CredencialesInvalidasException => HttpStatusCode.Unauthorized,
+                NoAutenticadoException => HttpStatusCode.Unauthorized,
+                PermisoDenegadoException => HttpStatusCode.Forbidden,
+                CuentaBloqueadaException => HttpStatusCode.Locked,
                 ReglaDeNegocioException => HttpStatusCode.BadRequest,
+                ValidacionException => HttpStatusCode.BadRequest,
                 DomainException => HttpStatusCode.BadRequest,
-                InvalidOperationException => HttpStatusCode.Unauthorized,
                 _ => HttpStatusCode.InternalServerError
             };
 
@@ -42,7 +46,11 @@ public class ExceptionHandlingMiddleware
 
             context.Response.StatusCode = (int)statusCode;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = ex.Message }));
+
+            object cuerpo = ex is ValidacionException validacion
+                ? new { error = validacion.Message, errores = validacion.Errores }
+                : new { error = statusCode == HttpStatusCode.InternalServerError ? "Ocurrió un error inesperado." : ex.Message };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(cuerpo));
         }
     }
 }

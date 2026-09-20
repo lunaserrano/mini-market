@@ -58,7 +58,7 @@
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1">
       <label class="text-sm">Producto</label>
-      <p-select [(ngModel)]="ajuste.productoId" [options]="productos()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" [filter]="true" />
+      <p-select appendTo="body" [(ngModel)]="ajuste.productoId" [options]="productos()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" [filter]="true" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Cantidad (positivo suma, negativo resta)</label>

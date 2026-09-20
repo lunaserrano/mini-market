@@ -1,6 +1,6 @@
 <div class="flex justify-between items-center mb-4">
   <h1 class="text-xl font-bold">Usuarios</h1>
-  <p-button label="Nuevo usuario" icon="pi pi-plus" (onClick)="nuevo()" />
+  <p-button *appHasPermission="permisos.UsuariosCrear" label="Nuevo usuario" icon="pi pi-plus" (onClick)="nuevo()" />
 </div>
 
 <p-table [value]="usuarios()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
@@ -9,29 +9,46 @@
       <th>Nombre</th>
       <th>Usuario</th>
       <th>Rol</th>
+      <th>Último acceso</th>
+      <th>Estado</th>
       <th>Activo</th>
-      <th style="width: 130px"></th>
+      <th style="width: 190px"></th>
     </tr>
   </ng-template>
   <ng-template #body let-usuario>
     <tr>
       <td>{{ usuario.nombreCompleto }}</td>
       <td>{{ usuario.username }}</td>
-      <td><p-tag [value]="usuario.rol" severity="info" /></td>
+      <td><p-tag [value]="usuario.rolNombre" severity="info" /></td>
+      <td class="text-sm text-surface-500">{{ usuario.ultimoLoginUtc ? (usuario.ultimoLoginUtc | date: 'dd/MM/yyyy HH:mm') : 'Nunca' }}</td>
       <td>
-        <p-toggleswitch [ngModel]="usuario.estado === 'A'" (ngModelChange)="cambiarEstado(usuario)" />
+        <div class="flex gap-1 flex-wrap">
+          @if (usuario.bloqueado) {
+            <p-tag value="Bloqueado" severity="danger" icon="pi pi-lock" />
+          }
+          @if (usuario.debeCambiarPassword) {
+            <p-tag value="Clave temporal" severity="warn" />
+          }
+        </div>
+      </td>
+      <td>
+        <p-toggleswitch [ngModel]="usuario.estado === 'A'" (ngModelChange)="cambiarEstado(usuario)" [disabled]="!puedeCambiarEstado()" />
       </td>
       <td>
         <div class="flex gap-1">
-          <p-button icon="pi pi-pencil" [text]="true" (onClick)="editar(usuario)" />
-          <p-button icon="pi pi-key" [text]="true" severity="secondary" (onClick)="abrirReset(usuario)" />
+          <p-button *appHasPermission="permisos.UsuariosEditar" icon="pi pi-pencil" [text]="true" title="Editar" (onClick)="editar(usuario)" />
+          <p-button *appHasPermission="permisos.UsuariosResetPassword" icon="pi pi-key" [text]="true" severity="secondary" title="Restablecer contraseña" (onClick)="abrirReset(usuario)" />
+          @if (usuario.bloqueado) {
+            <p-button *appHasPermission="permisos.UsuariosDesbloquear" icon="pi pi-lock-open" [text]="true" severity="warn" title="Desbloquear" (onClick)="desbloquear(usuario)" />
+          }
+          <p-button *appHasPermission="permisos.UsuariosEditar" icon="pi pi-sign-out" [text]="true" severity="secondary" title="Cerrar todas sus sesiones" (onClick)="revocarSesiones(usuario)" />
         </div>
       </td>
     </tr>
   </ng-template>
 </p-table>
 
-<p-dialog [header]="editandoId ? 'Editar usuario' : 'Nuevo usuario'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '26rem' }">
+<p-dialog [header]="editandoId ? 'Editar usuario' : 'Nuevo usuario'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '28rem' }">
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1">
       <label class="text-sm">Nombre completo</label>
@@ -39,30 +56,64 @@
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Usuario</label>
-      <input pInputText [(ngModel)]="formulario.username" [disabled]="!!editandoId" />
+      <input pInputText [(ngModel)]="formulario.username" [disabled]="!!editandoId" autocomplete="off" />
     </div>
     @if (!editandoId) {
       <div class="flex flex-col gap-1">
-        <label class="text-sm">Contraseña</label>
-        <p-password [(ngModel)]="formulario.password" [toggleMask]="true" styleClass="w-full" inputStyleClass="w-full" />
+        <label class="text-sm">Contraseña inicial</label>
+        <p-password [(ngModel)]="formulario.password" [toggleMask]="true" [feedback]="false" autocomplete="new-password" styleClass="w-full" inputStyleClass="w-full" />
+        <ul class="list-none p-0 m-0 mt-1 text-xs flex flex-wrap gap-x-3 gap-y-0.5">
+          @for (regla of reglasFormulario(); track regla.texto) {
+            <li [class]="regla.cumple ? 'text-green-600' : 'text-surface-500'">
+              <i [class]="regla.cumple ? 'pi pi-check-circle' : 'pi pi-circle'" class="mr-1 text-xs"></i>{{ regla.texto }}
+            </li>
+          }
+        </ul>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-toggleswitch [(ngModel)]="formulario.debeCambiarPassword" inputId="debeCambiar" />
+        <label for="debeCambiar" class="text-sm">Exigir que cambie la contraseña al iniciar sesión</label>
       </div>
     }
     <div class="flex flex-col gap-1">
       <label class="text-sm">Rol</label>
-      <p-select [(ngModel)]="formulario.rol" [options]="roles" optionLabel="label" optionValue="value" styleClass="w-full" />
+      <p-select appendTo="body"
+        [(ngModel)]="formulario.rolId"
+        [options]="roles()"
+        optionLabel="nombre"
+        optionValue="id"
+        placeholder="Seleccione un rol"
+        styleClass="w-full"
+      />
     </div>
   </div>
   <ng-template #footer>
-    <p-button label="Guardar" icon="pi pi-check" (onClick)="guardar()" />
+    <p-button label="Guardar" icon="pi pi-check" [disabled]="!formularioValido()" (onClick)="guardar()" />
   </ng-template>
 </p-dialog>
 
-<p-dialog header="Restablecer contraseña" [(visible)]="mostrarReset" [modal]="true" [style]="{ width: '22rem' }">
-  <div class="flex flex-col gap-1">
-    <label class="text-sm">Nueva contraseña</label>
-    <p-password [(ngModel)]="nuevaPassword" [toggleMask]="true" styleClass="w-full" inputStyleClass="w-full" />
+<p-dialog header="Restablecer contraseña" [(visible)]="mostrarReset" [modal]="true" [style]="{ width: '26rem' }">
+  <div class="flex flex-col gap-3">
+    <p class="m-0 text-sm text-surface-500">
+      Usuario: <strong>{{ usuarioReset?.username }}</strong>. Al restablecerla se cierran todas sus sesiones y se limpia un bloqueo si lo hubiera.
+    </p>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Nueva contraseña</label>
+      <p-password [(ngModel)]="nuevaPassword" [toggleMask]="true" [feedback]="false" autocomplete="new-password" styleClass="w-full" inputStyleClass="w-full" />
+      <ul class="list-none p-0 m-0 mt-1 text-xs flex flex-wrap gap-x-3 gap-y-0.5">
+        @for (regla of reglasReset(); track regla.texto) {
+          <li [class]="regla.cumple ? 'text-green-600' : 'text-surface-500'">
+            <i [class]="regla.cumple ? 'pi pi-check-circle' : 'pi pi-circle'" class="mr-1 text-xs"></i>{{ regla.texto }}
+          </li>
+        }
+      </ul>
+    </div>
+    <div class="flex items-center gap-2">
+      <p-toggleswitch [(ngModel)]="resetDebeCambiar" inputId="resetDebeCambiar" />
+      <label for="resetDebeCambiar" class="text-sm">Exigir que la cambie al iniciar sesión</label>
+    </div>
   </div>
   <ng-template #footer>
-    <p-button label="Restablecer" icon="pi pi-check" (onClick)="confirmarReset()" />
+    <p-button label="Restablecer" icon="pi pi-check" [disabled]="!resetValido()" (onClick)="confirmarReset()" />
   </ng-template>
 </p-dialog>

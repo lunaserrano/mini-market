@@ -47,7 +47,7 @@
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Categoría</label>
-      <p-select [(ngModel)]="formulario.categoriaId" [options]="categorias()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" />
+      <p-select appendTo="body" [(ngModel)]="formulario.categoriaId" [options]="categorias()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" />
     </div>
     <div class="grid grid-cols-2 gap-3">
       <div class="flex flex-col gap-1">

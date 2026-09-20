@@ -18,6 +18,7 @@ import { ConfigService } from '../../core/services/config.service';
 import { Caja, MovimientoCaja } from '../../core/models/caja.models';
 import { VentaResumen } from '../../core/models/venta.models';
 import { MonedaPipe } from '../../core/pipes/moneda.pipe';
+import { PERMISOS } from '../../core/security/permisos';
 
 @Component({
   selector: 'app-caja',
@@ -72,7 +73,7 @@ export class CajaComponent implements OnInit {
 
   ngOnInit(): void {
     this.cargar();
-    if (this.authService.tienePermiso('admin', 'supervisor')) {
+    if (this.authService.tienePermiso(PERMISOS.CajaVerTodas)) {
       this.cargarHistorial();
     }
   }
@@ -139,7 +140,7 @@ export class CajaComponent implements OnInit {
         detail: `Diferencia: Q${caja.diferencia?.toFixed(2)}`,
         life: 6000
       });
-      if (this.authService.tienePermiso('admin', 'supervisor')) this.cargarHistorial();
+      if (this.authService.tienePermiso(PERMISOS.CajaVerTodas)) this.cargarHistorial();
     });
   }
 

@@ -26,7 +26,15 @@ export class UsuarioService {
     return this.http.put<void>(`${this.baseUrl}/${id}/estado`, {}, { params: { activo } });
   }
 
-  resetPassword(id: number, nuevaPassword: string): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/${id}/reset-password`, { nuevaPassword });
+  resetPassword(id: number, nuevaPassword: string, debeCambiarPassword: boolean): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/${id}/reset-password`, { nuevaPassword, debeCambiarPassword });
+  }
+
+  desbloquear(id: number): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/${id}/desbloquear`, {});
+  }
+
+  revocarSesiones(id: number): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/${id}/revocar-sesiones`, {});
   }
 }

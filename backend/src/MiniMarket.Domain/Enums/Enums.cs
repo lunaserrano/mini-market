@@ -62,5 +62,7 @@ public enum DocumentoOrigenTipo
     Venta,
     Compra,
     AjusteManual,
-    Traslado
+    Traslado,
+    /// <summary>Solo para MovimientoCaja (ingreso por abono en efectivo); MovimientoInventario nunca lo usa.</summary>
+    AbonoCredito
 }

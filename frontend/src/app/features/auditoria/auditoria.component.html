@@ -1,0 +1,120 @@
+<div class="mb-4">
+  <h1 class="text-xl font-bold">Auditoría del sistema</h1>
+  <p class="m-0 text-sm text-surface-500">
+    Toda la actividad: inicios de sesión y cambios de seguridad, cada petición al servidor y cada clic o cambio de pantalla.
+  </p>
+</div>
+
+<div class="flex flex-wrap items-end gap-3 mb-4">
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Desde</label>
+    <p-datepicker [(ngModel)]="desde" dateFormat="dd/mm/yy" [showIcon]="true" [showButtonBar]="true" [maxDate]="hasta ?? undefined" />
+  </div>
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Hasta</label>
+    <p-datepicker [(ngModel)]="hasta" dateFormat="dd/mm/yy" [showIcon]="true" [showButtonBar]="true" [minDate]="desde ?? undefined" />
+  </div>
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Origen</label>
+    <p-select appendTo="body" [(ngModel)]="origen" [options]="origenes" optionLabel="etiqueta" optionValue="valor" placeholder="Todos" [showClear]="true" styleClass="w-56" />
+  </div>
+  <div class="flex flex-col gap-1">
+    <label class="text-sm">Evento</label>
+    <p-select appendTo="body" [(ngModel)]="tipo" [options]="tipos()" optionLabel="etiqueta" optionValue="valor" placeholder="Todos" [showClear]="true" styleClass="w-56" />
+  </div>
+  @if (usuarios().length) {
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Usuario</label>
+      <p-select appendTo="body"
+        [(ngModel)]="usuarioId"
+        [options]="usuarios()"
+        optionLabel="nombreCompleto"
+        optionValue="id"
+        placeholder="Todos"
+        [showClear]="true"
+        [filter]="true"
+        filterBy="nombreCompleto,username"
+        styleClass="w-56"
+      />
+    </div>
+  }
+  <p-button label="Buscar" icon="pi pi-search" (onClick)="buscar()" />
+  <p-button label="Limpiar" icon="pi pi-filter-slash" severity="secondary" [text]="true" (onClick)="limpiar()" />
+</div>
+
+<p-table
+  [value]="eventos()"
+  dataKey="id"
+  [(expandedRowKeys)]="expandidos"
+  [lazy]="true"
+  (onLazyLoad)="alCargarPagina($event)"
+  [loading]="cargando()"
+  [paginator]="true"
+  [rows]="tamanoPagina"
+  [rowsPerPageOptions]="opcionesTamanoPagina"
+  [totalRecords]="total()"
+  styleClass="p-datatable-sm"
+>
+  <ng-template #header>
+    <tr>
+      <th style="width: 3rem"></th>
+      <th style="width: 11rem">Fecha</th>
+      <th style="width: 10rem">Evento</th>
+      <th>Realizado por</th>
+      <th>Detalle</th>
+      <th>Petición</th>
+      <th style="width: 9rem">IP</th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-evento let-expandido="expanded">
+    <tr>
+      <td>
+        @if (evento.datos) {
+          <p-button
+            type="button"
+            [pRowToggler]="evento"
+            [text]="true"
+            [rounded]="true"
+            size="small"
+            severity="secondary"
+            [icon]="expandido ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+            ariaLabel="Ver datos del evento"
+          />
+        }
+      </td>
+      <td class="text-sm whitespace-nowrap">{{ evento.fechaUtc | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
+      <td><p-tag [value]="etiqueta(evento.tipo).texto" [severity]="etiqueta(evento.tipo).severidad" /></td>
+      <td>{{ evento.actorNombre ?? '—' }}</td>
+      <td class="text-sm text-surface-500">
+        {{ evento.detalle }}
+        @if (evento.objetivoNombre) {
+          <span class="text-surface-400"> → {{ evento.objetivoNombre }}</span>
+        }
+      </td>
+      <td class="text-sm">
+        @if (evento.origen === 'API') {
+          <span class="font-mono">{{ evento.metodo }} {{ evento.ruta }}</span>
+          <p-tag class="ml-2" [value]="'' + evento.statusCode" [severity]="severidadEstado(evento.statusCode)" />
+          <span class="ml-2 text-surface-400">{{ evento.duracionMs }} ms</span>
+        } @else if (evento.ruta) {
+          <span class="font-mono text-surface-500">{{ evento.ruta }}</span>
+        }
+      </td>
+      <td class="text-sm text-surface-500">{{ evento.ip ?? '—' }}</td>
+    </tr>
+  </ng-template>
+  <ng-template #expandedrow let-evento>
+    <tr>
+      <td></td>
+      <td colspan="6">
+        <div class="text-xs text-surface-500 mb-1">{{ evento.origen === 'API' ? 'Cuerpo de la petición (contraseñas y tokens ocultos)' : 'Datos del evento' }}</div>
+        <pre class="m-0 text-xs overflow-auto max-h-64">{{ datosFormateados(evento) }}</pre>
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template #emptymessage>
+    <tr>
+      <td colspan="7" class="text-center text-surface-400 py-6">No hay eventos para los filtros elegidos.</td>
+    </tr>
+  </ng-template>
+</p-table>

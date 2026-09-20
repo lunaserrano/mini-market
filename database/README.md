@@ -15,7 +15,7 @@ script ya aplicado en algún ambiente. Al arrancar la Api en cualquier ambiente,
 pendientes se aplican automáticamente.
 
 `seed.sql` es un espejo de referencia (sin el hash de contraseña) de los datos que realmente
-siembra `DataSeeder.cs` en desarrollo (empresa/sucursal demo, roles, usuario `admin` / `Admin123!`,
+siembra `DataSeeder.cs` en desarrollo (empresa/sucursal demo, roles de sistema con sus permisos, usuario `admin` / `Admin123!`,
 categorías base). El seed real corre solo en `Development` y es idempotente.
 
 ## Correcciones aplicadas sobre el script original del usuario
@@ -66,12 +66,53 @@ quedan sin presentación asociada, sin backfill inventado). Cada compra además 
 `TipoPrecio.PrecioCompra` de esa presentación actualizado con el último precio pagado (dentro de la
 misma transacción), para que la siguiente compra ya sugiera el costo más reciente.
 
+## Seguridad: roles por empresa, permisos, sesiones y auditoría (`0005_seguridad.sql`)
+
+Reemplaza los 3 roles fijos y el `[Authorize(Roles = ...)]` por **permisos** que el administrador asigna a **roles editables**:
+
+- **`RolCatalogo` es ahora por empresa** (`EmpresaId`). Los 3 roles base (`admin`/`supervisor`/`cajero`) se copian a cada empresa como `EsSistema = 1` (no se pueden eliminar); el admin crea el resto desde **Roles y permisos**. La migración copia los roles globales a cada empresa existente, repunta `Usuario.RolId` y elimina los globales. El `UNIQUE` sobre `Codigo` (nombre autogenerado) se reemplaza por `UX_RolCatalogo_Empresa_Codigo`.
+- **`Permiso`** es un catálogo global con códigos `modulo.accion` (`ventas.anular`, `usuarios.crear`...). La fuente de verdad es `Domain/Security/Permisos.cs`: `PermisoCatalogSync` lo sincroniza en **cada arranque** (todos los entornos), así que agregar un permiso no exige otra migración. **`RolPermiso`** une rol y permiso.
+- **El rol Administrador no tiene filas en `RolPermiso`**: siempre tiene todo el catálogo (no puede quedarse sin acceso). Los permisos por defecto de supervisor y cajero replican lo que hacían los `[Authorize(Roles)]` anteriores; para empresas nuevas los asigna `DataSeeder` desde `Permisos.PorDefecto` — **mantener ambos sincronizados** si se cambian.
+- **`Usuario`** gana `IntentosFallidos`/`BloqueadoHasta` (bloqueo temporal tras 5 intentos fallidos, configurable en la sección `Seguridad` de appsettings), `DebeCambiarPassword` (contraseña temporal: hasta cambiarla solo puede usar los endpoints de sesión), `UltimoLoginUtc` y `PasswordCambiadaUtc`.
+- **`RefreshToken`** guarda solo el **hash SHA-256** del token. Cada uso lo rota (misma `FamiliaId`); presentar uno ya rotado revoca toda la familia. El access token (JWT) dura 15 minutos y lleva los permisos como claims `permiso`, por eso un cambio de permisos o de rol llega al usuario al renovar su sesión (máximo 15 minutos).
+- **`EventoSeguridad`** es la auditoría (logins, bloqueos, cambios de usuarios/roles/permisos). Sin FK a propósito: el registro sobrevive aunque se borre el usuario o el rol.
+
+## Auditoría de toda la actividad (`0006_auditoria_actividad.sql`)
+
+`EventoSeguridad` deja de ser solo de seguridad y pasa a registrar **toda** la actividad, distinguida por la columna `Origen`:
+
+- **`SEG`** — eventos de seguridad de siempre (login, bloqueos, cambios de usuarios/roles).
+- **`API`** — cada petición HTTP al backend (`AuditoriaMiddleware`): método, ruta con query, código de estado, duración, usuario, IP y cuerpo JSON con contraseñas/tokens ocultos (`Datos`). Se omiten los preflights `OPTIONS`, Swagger y `POST /api/auditoria/cliente`.
+- **`UI`** — clics y cambios de pantalla que el navegador reporta por lotes a `POST /api/auditoria/cliente`. `Datos` guarda el descriptor del elemento (nunca el valor de un campo).
+
+Las filas de `API` y `UI` no se escriben en la petición: pasan por una cola en memoria y un `BackgroundService` las inserta por lotes. Con esta granularidad la tabla crece rápido: conviene definir una retención (purga por `FechaUtc`) antes de producción.
+
 ## Multi-tenant sin Row-Level Security (por ahora)
 
 Todas las tablas relevantes llevan `EmpresaId`/`SucursalId` con índice explícito, pensadas para
 que cada repositorio Dapper filtre siempre por esos valores (ver `ITenantContext` en
 `MiniMarket.Application`). No se usa Row-Level Security de SQL Server en este alcance — es una
 evolución futura documentada como defensa adicional, no un requisito del esqueleto actual.
+
+## Ventas a crédito (`0006_creditos.sql`)
+
+Un cliente puede llevarse una venta sin pagarla del todo y abonar después hasta cancelarla.
+
+- **`Credito`**: una fila por venta a crédito (índice único sobre `VentaId`). `MontoOriginal` es lo que
+  quedó a deber al vender (`Venta.Total` − pagos recibidos en el momento, que siguen en `PagoVenta`);
+  `SaldoPendiente` baja con cada abono. `CHECK (SaldoPendiente <= MontoOriginal)`.
+- **`AbonoCredito`**: cada pago posterior. Inmutable (no se edita ni se borra). Si es en efectivo se
+  liga a la `Caja` abierta que lo recibió y además genera un `INGRESO` en `MovimientoCaja`
+  (`DocumentoReferenciaTipo = 'AbonoCredito'`), así el corte de caja cuadra.
+- **Estados**: `PENDIENTE` → `PAGADO` (saldo 0) | `ANULADO` (se anuló la venta origen). "Vencido" no se
+  guarda: se calcula al consultar (`PENDIENTE` con `FechaVencimiento` pasada). La fecha de vencimiento se
+  guarda al final del día elegido.
+- **Anular una venta a crédito** solo se permite mientras no tenga abonos; con abonos ya hay dinero del
+  cliente recibido y la devolución no está modelada.
+- **Permisos** `creditos.ver`, `creditos.abonar`, `creditos.otorgar` (vender a crédito, se valida en
+  `VentaService`). La migración se los asigna a `supervisor` y `cajero` de las empresas existentes; las
+  nuevas los reciben del `DataSeeder`. `GET /api/clientes` también acepta `creditos.otorgar` para que el
+  POS pueda elegir cliente.
 
 ## Motor de base de datos usado en desarrollo
 

@@ -4,10 +4,16 @@ public record DetalleVentaCreateDto(int ProductoId, int TipoPrecioId, decimal Ca
 
 public record PagoVentaCreateDto(string Metodo, decimal Monto, string? Referencia);
 
+/// <summary>
+/// AlCredito: la parte no pagada (Total - Pagos) queda como deuda del cliente (requiere ClienteId y permiso
+/// creditos.otorgar). En ese caso Pagos puede venir vacío o cubrir solo una parte del total.
+/// </summary>
 public record VentaCreateDto(
     int? ClienteId,
     IReadOnlyList<DetalleVentaCreateDto> Detalles,
-    IReadOnlyList<PagoVentaCreateDto> Pagos
+    IReadOnlyList<PagoVentaCreateDto> Pagos,
+    bool AlCredito = false,
+    DateTime? FechaVencimiento = null
 );
 
 public record DetalleVentaDto(
@@ -24,6 +30,7 @@ public record VentaDto(
     IReadOnlyList<PagoVentaDto> Pagos
 );
 
-public record VentaResumenDto(int Id, int Folio, DateTime Fecha, string? ClienteNombre, decimal Total, string Estado);
+/// <summary>SaldoCredito: deuda vigente de la venta si se hizo a crédito y aún está pendiente; null en cualquier otro caso.</summary>
+public record VentaResumenDto(int Id, int Folio, DateTime Fecha, string? ClienteNombre, decimal Total, string Estado, decimal? SaldoCredito);
 
 public record AnularVentaRequest(string Motivo, bool RestituirStock = true);

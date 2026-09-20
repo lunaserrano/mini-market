@@ -4,6 +4,7 @@ using MiniMarket.Application.Interfaces.Repositories;
 using MiniMarket.Domain.Entities;
 using MiniMarket.Domain.Enums;
 using MiniMarket.Domain.Exceptions;
+using MiniMarket.Domain.Security;
 
 namespace MiniMarket.Application.Services;
 
@@ -20,6 +21,8 @@ public class VentaService
     private readonly IProductoRepository _productoRepository;
     private readonly ICajaRepository _cajaRepository;
     private readonly IEmpresaRepository _empresaRepository;
+    private readonly IClienteRepository _clienteRepository;
+    private readonly ICreditoRepository _creditoRepository;
     private readonly IUnitOfWorkFactory _unitOfWorkFactory;
     private readonly ITenantContext _tenant;
 
@@ -29,6 +32,8 @@ public class VentaService
         IProductoRepository productoRepository,
         ICajaRepository cajaRepository,
         IEmpresaRepository empresaRepository,
+        IClienteRepository clienteRepository,
+        ICreditoRepository creditoRepository,
         IUnitOfWorkFactory unitOfWorkFactory,
         ITenantContext tenant)
     {
@@ -37,6 +42,8 @@ public class VentaService
         _productoRepository = productoRepository;
         _cajaRepository = cajaRepository;
         _empresaRepository = empresaRepository;
+        _clienteRepository = clienteRepository;
+        _creditoRepository = creditoRepository;
         _unitOfWorkFactory = unitOfWorkFactory;
         _tenant = tenant;
     }
@@ -82,9 +89,38 @@ public class VentaService
             total += lineConIva;
         }
 
+        // Los importes se guardan como DECIMAL(18,2): se redondea igual que SQL Server para que el saldo
+        // del crédito (Total - pagado) sea exactamente el que la BD terminará guardando.
+        total = Math.Round(total, 2, MidpointRounding.AwayFromZero);
+
+        if (request.ClienteId is { } clienteId)
+        {
+            var cliente = await _clienteRepository.ObtenerPorIdAsync(_tenant.EmpresaId, clienteId)
+                ?? throw new EntidadNoEncontradaException("Cliente", clienteId);
+            if (request.AlCredito && cliente.Estado != "A")
+                throw new ReglaDeNegocioException($"El cliente '{cliente.Nombre}' está inactivo: no se le puede vender a crédito.");
+        }
+
         var totalPagado = request.Pagos.Sum(p => p.Monto);
-        if (totalPagado + 0.01m < total)
+        var saldoCredito = 0m;
+        if (request.AlCredito)
+        {
+            if (!_tenant.TienePermiso(Permisos.CreditosOtorgar))
+                throw new PermisoDenegadoException("No tiene permiso para vender a crédito.");
+            if (request.ClienteId is null)
+                throw new ReglaDeNegocioException("Para vender a crédito debe seleccionar un cliente.");
+            // Un día de tolerancia: "hoy" para el cajero (hora local) puede ser "mañana" en UTC.
+            if (request.FechaVencimiento is { } vence && vence.Date < DateTime.UtcNow.Date.AddDays(-1))
+                throw new ReglaDeNegocioException("La fecha de vencimiento del crédito no puede estar en el pasado.");
+
+            saldoCredito = total - totalPagado;
+            if (saldoCredito <= 0)
+                throw new ReglaDeNegocioException("Los pagos ya cubren el total de la venta: no queda saldo para dejar a crédito.");
+        }
+        else if (totalPagado + 0.01m < total)
+        {
             throw new PagosInsuficientesException(total, totalPagado);
+        }
 
         // --- Paso 2: transacción — folio, descuento de stock, inserciones ---
         using var uow = _unitOfWorkFactory.Create();
@@ -180,6 +216,23 @@ public class VentaService
             }, uow.Transaction);
         }
 
+        if (request.AlCredito)
+        {
+            await _creditoRepository.CrearAsync(new Credito
+            {
+                EmpresaId = _tenant.EmpresaId,
+                VentaId = venta.Id,
+                ClienteId = request.ClienteId!.Value,
+                MontoOriginal = saldoCredito,
+                SaldoPendiente = saldoCredito,
+                Estado = Credito.Pendiente,
+                // El cliente elige un día: el crédito vence al terminar ese día, no a su medianoche inicial.
+                FechaVencimiento = request.FechaVencimiento?.Date.AddDays(1).AddSeconds(-1),
+                FechaCreacion = venta.Fecha,
+                CreadoPorUsuarioId = _tenant.UsuarioId
+            }, uow.Transaction);
+        }
+
         uow.Commit();
 
         return new VentaDto(venta.Id, folio, venta.Fecha, venta.ClienteId, venta.Estado,
@@ -188,8 +241,8 @@ public class VentaService
 
     public Task<IReadOnlyList<VentaResumenDto>> ListarAsync(int? sucursalId, int? cajaId, DateTime? desde, DateTime? hasta)
     {
-        // Un cajero solo ve sus propias ventas; admin/supervisor ven todas las de la sucursal/empresa.
-        var usuarioId = _tenant.Rol.Equals("cajero", StringComparison.OrdinalIgnoreCase) ? _tenant.UsuarioId : (int?)null;
+        // Quien no tenga "ventas.ver_todas" (p. ej. un cajero) solo ve sus propias ventas.
+        var usuarioId = _tenant.TienePermiso(Permisos.VentasVerTodas) ? (int?)null : _tenant.UsuarioId;
         return _ventaRepository.ListarAsync(_tenant.EmpresaId, sucursalId, usuarioId, cajaId, desde, hasta);
     }
 
@@ -204,6 +257,18 @@ public class VentaService
             throw new ReglaDeNegocioException("La venta ya está anulada.");
 
         using var uow = _unitOfWorkFactory.Create();
+
+        // Una venta a crédito solo se anula mientras no haya abonos: con abonos ya hay dinero recibido
+        // del cliente que habría que devolver, y ese flujo no se resuelve aquí. Sin abonos, el crédito
+        // queda ANULADO y el cliente deja de deberlo.
+        var credito = await _creditoRepository.ObtenerPorVentaAsync(id, uow.Transaction);
+        if (credito is not null)
+        {
+            if (await _creditoRepository.ContarAbonosAsync(credito.Id, uow.Transaction) > 0)
+                throw new ReglaDeNegocioException("No se puede anular una venta a crédito que ya tiene abonos registrados.");
+            await _creditoRepository.AnularAsync(credito.Id, uow.Transaction);
+        }
+
         await _ventaRepository.AnularAsync(id, _tenant.UsuarioId, request.Motivo, uow.Transaction);
 
         if (request.RestituirStock)

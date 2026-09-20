@@ -23,14 +23,24 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
         services.AddScoped<ITenantContext, TenantContext>();
 
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(configuration.GetSection(SeguridadOptions.SectionName).Get<SeguridadOptions>() ?? new SeguridadOptions());
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddScoped<IRequestInfo, RequestInfo>();
+        services.AddScoped<ISeguridadAuditor, SeguridadAuditor>();
+        // La cola es Singleton: la comparten el middleware/endpoint (productores) y AuditoriaWriterService (consumidor, en Api).
+        services.AddSingleton<AuditoriaCola>();
+        services.AddSingleton<IAuditoriaCola>(sp => sp.GetRequiredService<AuditoriaCola>());
 
         // Repositorios (Dapper) — Scoped es suficiente porque no mantienen estado entre llamadas,
         // salvo abrir/cerrar su propia conexión por operación.
         services.AddScoped<IUsuarioRepository, UsuarioRepository>();
         services.AddScoped<IRolRepository, RolRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IEventoSeguridadRepository, EventoSeguridadRepository>();
         services.AddScoped<IEmpresaRepository, EmpresaRepository>();
         services.AddScoped<ICategoriaRepository, CategoriaRepository>();
         services.AddScoped<IProveedorRepository, ProveedorRepository>();
@@ -40,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ICajaRepository, CajaRepository>();
         services.AddScoped<IVentaRepository, VentaRepository>();
         services.AddScoped<ICompraRepository, CompraRepository>();
+        services.AddScoped<ICreditoRepository, CreditoRepository>();
 
         // Services de Application (orquestan repos + reglas de negocio).
         services.AddScoped<AuthService>();
@@ -52,7 +63,11 @@ public static class DependencyInjection
         services.AddScoped<CajaService>();
         services.AddScoped<VentaService>();
         services.AddScoped<CompraService>();
+        services.AddScoped<CreditoService>();
         services.AddScoped<UsuarioService>();
+        services.AddScoped<RolService>();
+        services.AddScoped<PermisoService>();
+        services.AddScoped<AuditoriaService>();
 
         return services;
     }
