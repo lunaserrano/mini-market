@@ -18,16 +18,8 @@ public class InventarioRepository : IInventarioRepository
     public async Task<IReadOnlyList<InventarioDto>> ListarAsync(int empresaId, int? sucursalId, int? productoId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            SELECT i.ProductoId, p.Nombre AS ProductoNombre, i.SucursalId, i.StockActual, i.StockMinimo
-            FROM Inventario i
-            INNER JOIN Producto p ON p.Id = i.ProductoId
-            WHERE p.EmpresaId = @empresaId
-              AND (@sucursalId IS NULL OR i.SucursalId = @sucursalId)
-              AND (@productoId IS NULL OR i.ProductoId = @productoId)
-            ORDER BY p.Nombre
-            """;
-        var items = await connection.QueryAsync<InventarioDto>(sql, new { empresaId, sucursalId, productoId });
+        var items = await connection.QueryAsync<InventarioDto>(
+            "market.usp_Inventario_Listar", new { empresaId, sucursalId, productoId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -37,8 +29,7 @@ public class InventarioRepository : IInventarioRepository
         try
         {
             return await connection.QuerySingleOrDefaultAsync<Inventario>(
-                "SELECT * FROM Inventario WHERE ProductoId = @productoId AND SucursalId = @sucursalId",
-                new { productoId, sucursalId }, transaction);
+                "market.usp_Inventario_Obtener", new { productoId, sucursalId }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {
@@ -48,13 +39,9 @@ public class InventarioRepository : IInventarioRepository
 
     public async Task<Inventario?> ObtenerParaActualizarAsync(int productoId, int sucursalId, IDbTransaction transaction)
     {
-        // UPDLOCK+ROWLOCK evita que dos ventas concurrentes lean el mismo stock antes de que la primera
-        // haga commit (protección contra condiciones de carrera al descontar inventario).
-        const string sql = """
-            SELECT * FROM Inventario WITH (UPDLOCK, ROWLOCK)
-            WHERE ProductoId = @productoId AND SucursalId = @sucursalId
-            """;
-        return await transaction.Connection!.QuerySingleOrDefaultAsync<Inventario>(sql, new { productoId, sucursalId }, transaction);
+        return await transaction.Connection!.QuerySingleOrDefaultAsync<Inventario>(
+            "market.usp_Inventario_ObtenerParaActualizar", new { productoId, sucursalId }, transaction,
+            commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> CrearAsync(Inventario inventario, IDbTransaction? transaction = null)
@@ -62,12 +49,11 @@ public class InventarioRepository : IInventarioRepository
         var connection = transaction?.Connection ?? _connectionFactory.CreateOpenConnection();
         try
         {
-            const string sql = """
-                INSERT INTO Inventario (ProductoId, SucursalId, StockActual, StockMinimo, FechaActualizacion)
-                OUTPUT INSERTED.Id
-                VALUES (@ProductoId, @SucursalId, @StockActual, @StockMinimo, @FechaActualizacion)
-                """;
-            return await connection.QuerySingleAsync<int>(sql, inventario, transaction);
+            return await connection.QuerySingleAsync<int>("market.usp_Inventario_Crear", new
+            {
+                inventario.ProductoId, inventario.SucursalId, inventario.StockActual,
+                inventario.StockMinimo, inventario.FechaActualizacion
+            }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {
@@ -77,48 +63,32 @@ public class InventarioRepository : IInventarioRepository
 
     public async Task ActualizarStockAsync(int productoId, int sucursalId, decimal nuevoStock, IDbTransaction transaction)
     {
-        const string sql = """
-            UPDATE Inventario SET StockActual = @nuevoStock, FechaActualizacion = SYSUTCDATETIME()
-            WHERE ProductoId = @productoId AND SucursalId = @sucursalId
-            """;
-        await transaction.Connection!.ExecuteAsync(sql, new { productoId, sucursalId, nuevoStock }, transaction);
+        await transaction.Connection!.ExecuteAsync(
+            "market.usp_Inventario_ActualizarStock", new { productoId, sucursalId, nuevoStock }, transaction,
+            commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> RegistrarMovimientoAsync(MovimientoInventario movimiento, IDbTransaction transaction)
     {
-        const string sql = """
-            INSERT INTO MovimientoInventario (EmpresaId, SucursalId, ProductoId, UsuarioId, TipoMovimiento, Cantidad,
-                StockResultante, DocumentoOrigenTipo, DocumentoOrigenId, Observacion, FechaMovimiento)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @SucursalId, @ProductoId, @UsuarioId, @TipoMovimiento, @Cantidad,
-                @StockResultante, @DocumentoOrigenTipo, @DocumentoOrigenId, @Observacion, @FechaMovimiento)
-            """;
-        return await transaction.Connection!.QuerySingleAsync<int>(sql, movimiento, transaction);
+        return await transaction.Connection!.QuerySingleAsync<int>("market.usp_MovimientoInventario_Registrar", new
+        {
+            movimiento.EmpresaId, movimiento.SucursalId, movimiento.ProductoId, movimiento.UsuarioId,
+            movimiento.TipoMovimiento, movimiento.Cantidad, movimiento.StockResultante,
+            movimiento.DocumentoOrigenTipo, movimiento.DocumentoOrigenId, movimiento.Observacion, movimiento.FechaMovimiento
+        }, transaction, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<IReadOnlyList<MovimientoInventarioDto>> ListarMovimientosAsync(int empresaId, MovimientoInventarioFiltro filtro)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            SELECT m.Id, m.ProductoId, p.Nombre AS ProductoNombre, m.SucursalId, m.TipoMovimiento, m.Cantidad,
-                   m.StockResultante, m.DocumentoOrigenTipo, m.DocumentoOrigenId, m.Observacion, m.FechaMovimiento
-            FROM MovimientoInventario m
-            INNER JOIN Producto p ON p.Id = m.ProductoId
-            WHERE m.EmpresaId = @empresaId
-              AND (@productoId IS NULL OR m.ProductoId = @productoId)
-              AND (@sucursalId IS NULL OR m.SucursalId = @sucursalId)
-              AND (@desde IS NULL OR m.FechaMovimiento >= @desde)
-              AND (@hasta IS NULL OR m.FechaMovimiento <= @hasta)
-            ORDER BY m.FechaMovimiento DESC
-            """;
-        var items = await connection.QueryAsync<MovimientoInventarioDto>(sql, new
+        var items = await connection.QueryAsync<MovimientoInventarioDto>("market.usp_MovimientoInventario_Listar", new
         {
             empresaId,
             filtro.ProductoId,
             filtro.SucursalId,
             filtro.Desde,
             filtro.Hasta
-        });
+        }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 }

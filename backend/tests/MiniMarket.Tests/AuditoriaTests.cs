@@ -83,26 +83,29 @@ public class AuditoriaDatosTests
 public class AuditoriaServiceTests
 {
     private readonly IEventoSeguridadRepository _repo = Substitute.For<IEventoSeguridadRepository>();
+    private readonly IParametroRepository _parametros = Substitute.For<IParametroRepository>();
     private readonly IAuditoriaCola _cola = Substitute.For<IAuditoriaCola>();
     private readonly IRequestInfo _request = Substitute.For<IRequestInfo>();
+    private readonly IAuditoriaEstadoProvider _estado = Substitute.For<IAuditoriaEstadoProvider>();
     private readonly ManualTimeProvider _time = new();
     private readonly List<EventoSeguridad> _encolados = new();
 
-    private AuditoriaService Crear()
+    private AuditoriaService Crear(bool habilitada = true)
     {
         _request.Ip.Returns("10.0.0.5");
         _request.UserAgent.Returns("Mozilla/5.0");
         _cola.Encolar(Arg.Do<EventoSeguridad>(_encolados.Add)).Returns(true);
-        return new AuditoriaService(_repo, Datos.Tenant(usuarioId: 77, empresaId: 9), _cola, _request, _time);
+        _estado.EstaHabilitadaAsync(Arg.Any<int?>(), Arg.Any<int?>()).Returns(habilitada);
+        return new AuditoriaService(_repo, _parametros, Datos.Tenant(usuarioId: 77, empresaId: 9), _cola, _request, _time, _estado);
     }
 
     private static EventoClienteDto Clic(string tipo = TipoEventoSeguridad.ClicUi, DateTime? fecha = null) =>
         new(tipo, fecha, "/ventas", "Clic en Cobrar", new Dictionary<string, string?> { ["tag"] = "BUTTON", ["texto"] = "Cobrar" });
 
     [Fact]
-    public void EmpresaYUsuarioSalenDelTokenYNoDelCliente()
+    public async Task EmpresaYUsuarioSalenDelTokenYNoDelCliente()
     {
-        Crear().RegistrarEventosCliente(new[] { Clic() });
+        await Crear().RegistrarEventosCliente(new[] { Clic() });
 
         var evento = Assert.Single(_encolados);
         Assert.Equal(9, evento.EmpresaId);
@@ -117,37 +120,45 @@ public class AuditoriaServiceTests
     [InlineData(TipoEventoSeguridad.LoginOk)]
     [InlineData(TipoEventoSeguridad.AccionApi)]
     [InlineData("LO_QUE_SEA")]
-    public void ElClienteNoPuedeFabricarEventosDeSeguridadNiDeApi(string tipo)
+    public async Task ElClienteNoPuedeFabricarEventosDeSeguridadNiDeApi(string tipo)
     {
         var sut = Crear();
 
-        Assert.Throws<ReglaDeNegocioException>(() => sut.RegistrarEventosCliente(new[] { Clic(), Clic(tipo) }));
+        await Assert.ThrowsAsync<ReglaDeNegocioException>(() => sut.RegistrarEventosCliente(new[] { Clic(), Clic(tipo) }));
 
         Assert.Empty(_encolados); // el lote inválido no se registra a medias
     }
 
     [Fact]
-    public void RechazaLotesDemasiadoGrandes()
+    public async Task RechazaLotesDemasiadoGrandes()
     {
         var lote = Enumerable.Range(0, AuditoriaService.MaxEventosPorLote + 1).Select(_ => Clic()).ToList();
 
-        Assert.Throws<ReglaDeNegocioException>(() => Crear().RegistrarEventosCliente(lote));
+        await Assert.ThrowsAsync<ReglaDeNegocioException>(() => Crear().RegistrarEventosCliente(lote));
         Assert.Empty(_encolados);
     }
 
     [Fact]
-    public void UsaLaFechaDelNavegadorSoloSiEsCreible()
+    public async Task UsaLaFechaDelNavegadorSoloSiEsCreible()
     {
         var reciente = _time.AhoraUtc.AddSeconds(-5);
         var muyAntigua = _time.AhoraUtc.AddDays(-3);
         var futura = _time.AhoraUtc.AddHours(2);
 
-        Crear().RegistrarEventosCliente(new[] { Clic(fecha: reciente), Clic(fecha: muyAntigua), Clic(fecha: futura), Clic() });
+        await Crear().RegistrarEventosCliente(new[] { Clic(fecha: reciente), Clic(fecha: muyAntigua), Clic(fecha: futura), Clic() });
 
         Assert.Equal(reciente, _encolados[0].FechaUtc);
         Assert.Equal(_time.AhoraUtc, _encolados[1].FechaUtc);
         Assert.Equal(_time.AhoraUtc, _encolados[2].FechaUtc);
         Assert.Equal(_time.AhoraUtc, _encolados[3].FechaUtc);
+    }
+
+    [Fact]
+    public async Task NoEncolaNadaSiLaAuditoriaEstaDeshabilitada()
+    {
+        await Crear(habilitada: false).RegistrarEventosCliente(new[] { Clic() });
+
+        Assert.Empty(_encolados);
     }
 
     [Fact]
@@ -160,6 +171,24 @@ public class AuditoriaServiceTests
 
         await _repo.Received().ListarAsync(9, Arg.Is<AuditoriaFiltro>(f =>
             f.Origen == "UI" && f.Tipo == null && f.Pagina == 1 && f.TamanoPagina == 100));
+    }
+
+    [Fact]
+    public async Task ObtenerEstadoUsaElValorDeEmpresaCuandoNoHayFila()
+    {
+        _parametros.ObtenerAuditoriaHabilitadaAsync(9, 0).Returns((bool?)null);
+
+        var estado = await Crear().ObtenerEstadoAsync();
+
+        Assert.True(estado.Habilitada); // fail-safe: sin fila se asume habilitada
+    }
+
+    [Fact]
+    public async Task ActualizarEstadoHaceUpsertParaLaEmpresaActual()
+    {
+        await Crear().ActualizarEstadoAsync(new AuditoriaEstadoDto(false));
+
+        await _parametros.Received().ActualizarAuditoriaHabilitadaAsync(9, 0, false, 77);
     }
 }
 
@@ -186,10 +215,14 @@ public class AuditoriaMiddlewareTests
 {
     private readonly List<EventoSeguridad> _encolados = new();
     private readonly IAuditoriaCola _cola = Substitute.For<IAuditoriaCola>();
+    private readonly IAuditoriaEstadoProvider _estado = Substitute.For<IAuditoriaEstadoProvider>();
     private readonly ManualTimeProvider _time = new();
 
-    public AuditoriaMiddlewareTests() =>
+    public AuditoriaMiddlewareTests()
+    {
         _cola.Encolar(Arg.Do<EventoSeguridad>(_encolados.Add)).Returns(true);
+        _estado.EstaHabilitadaAsync(Arg.Any<int?>(), Arg.Any<int?>()).Returns(true);
+    }
 
     private static DefaultHttpContext Peticion(string metodo, string ruta, string? cuerpo = null, params (string tipo, string valor)[] claims)
     {
@@ -210,8 +243,9 @@ public class AuditoriaMiddlewareTests
         return contexto;
     }
 
-    private Task Ejecutar(HttpContext contexto, RequestDelegate siguiente) =>
-        new AuditoriaMiddleware(siguiente, Substitute.For<ILogger<AuditoriaMiddleware>>()).InvokeAsync(contexto, _cola, _time);
+    private Task Ejecutar(HttpContext contexto, RequestDelegate siguiente, bool auditoriaHabilitada = true) =>
+        new AuditoriaMiddleware(siguiente, Substitute.For<ILogger<AuditoriaMiddleware>>())
+            .InvokeAsync(contexto, _cola, _time, new AuditoriaOptions { Habilitada = auditoriaHabilitada }, _estado);
 
     [Fact]
     public async Task RegistraLaPeticionConUsuarioEstadoYCuerpoSinSecretos()
@@ -299,6 +333,36 @@ public class AuditoriaMiddlewareTests
         await Ejecutar(contexto, _ => Task.CompletedTask);
 
         Assert.Null(Assert.Single(_encolados).Datos);
+    }
+
+    [Fact]
+    public async Task NoRegistraNadaSiLaAuditoriaEstaDeshabilitada()
+    {
+        var siguienteEjecutado = false;
+
+        await Ejecutar(Peticion("POST", "/api/ventas", """{"a":1}"""), ctx =>
+        {
+            siguienteEjecutado = true;
+            return Task.CompletedTask;
+        }, auditoriaHabilitada: false);
+
+        Assert.True(siguienteEjecutado);
+        Assert.Empty(_encolados);
+    }
+
+    [Fact]
+    public async Task NoRegistraNadaSiLaEmpresaTieneLaAuditoriaDesactivadaEnBd()
+    {
+        _estado.EstaHabilitadaAsync(3, null).Returns(false);
+        var contexto = Peticion("POST", "/api/usuarios", """{"a":1}""", (TenantClaimTypes.EmpresaId, "3"));
+
+        await Ejecutar(contexto, ctx =>
+        {
+            ctx.Response.StatusCode = 200;
+            return Task.CompletedTask;
+        });
+
+        Assert.Empty(_encolados);
     }
 
     [Fact]

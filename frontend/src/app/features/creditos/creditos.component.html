@@ -31,7 +31,7 @@
       optionValue="value"
       [ngModel]="filtroEstado()"
       (ngModelChange)="filtroEstado.set($event)"
-      styleClass="w-48"
+      styleClass="w-full sm:w-48"
     />
     <p-select appendTo="body"
       [options]="opcionesCliente()"
@@ -43,10 +43,11 @@
       [showClear]="true"
       [filter]="true"
       filterBy="label"
-      styleClass="w-64"
+      styleClass="w-full sm:w-64"
     />
   </div>
 
+  <div class="mm-table-wrap">
   <p-table [value]="visibles()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
     <ng-template #header>
       <tr>
@@ -113,6 +114,7 @@
       </tr>
     </ng-template>
   </p-table>
+  </div>
 </div>
 
 <!-- Detalle del crédito -->
@@ -153,6 +155,7 @@
 
       <div>
         <p class="text-sm font-semibold mb-1">Abonos</p>
+        <div class="mm-table-wrap">
         <p-table [value]="credito.abonos" styleClass="p-datatable-sm">
           <ng-template #header>
             <tr>
@@ -176,6 +179,7 @@
             </tr>
           </ng-template>
         </p-table>
+        </div>
       </div>
     </div>
   }

@@ -8,6 +8,7 @@
   <p-button *appHasPermission="permisos.RolesGestionar" label="Nuevo rol" icon="pi pi-plus" (onClick)="nuevo()" />
 </div>
 
+<div class="mm-table-wrap">
 <p-table [value]="roles()" [loading]="cargando()" styleClass="p-datatable-sm">
   <ng-template #header>
     <tr>
@@ -50,6 +51,7 @@
     </tr>
   </ng-template>
 </p-table>
+</div>
 
 <p-dialog
   [header]="soloLectura() ? 'Rol Administrador' : editando ? 'Editar rol' : 'Nuevo rol'"

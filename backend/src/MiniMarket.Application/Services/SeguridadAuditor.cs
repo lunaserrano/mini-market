@@ -11,17 +11,22 @@ public class SeguridadAuditor : ISeguridadAuditor
     private readonly IRequestInfo _request;
     private readonly TimeProvider _time;
     private readonly ILogger<SeguridadAuditor> _logger;
+    private readonly IAuditoriaEstadoProvider _estado;
 
-    public SeguridadAuditor(IEventoSeguridadRepository repository, IRequestInfo request, TimeProvider time, ILogger<SeguridadAuditor> logger)
+    public SeguridadAuditor(IEventoSeguridadRepository repository, IRequestInfo request, TimeProvider time, ILogger<SeguridadAuditor> logger, IAuditoriaEstadoProvider estado)
     {
         _repository = repository;
         _request = request;
         _time = time;
         _logger = logger;
+        _estado = estado;
     }
 
     public async Task RegistrarAsync(string tipo, int? empresaId, int? actorUsuarioId, int? usuarioObjetivoId, string? detalle = null)
     {
+        // Sin SucursalId propio (login/roles/usuarios no lo rastrean): se evalúa a nivel de empresa.
+        if (!await _estado.EstaHabilitadaAsync(empresaId, sucursalId: null)) return;
+
         try
         {
             await _repository.RegistrarAsync(new EventoSeguridad

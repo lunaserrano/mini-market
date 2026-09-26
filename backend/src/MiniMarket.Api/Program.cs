@@ -4,12 +4,14 @@ using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using MiniMarket.Api.Authorization;
 using MiniMarket.Api.Controllers;
 using MiniMarket.Api.Filters;
 using MiniMarket.Api.Middleware;
 using MiniMarket.Application.Interfaces;
+using MiniMarket.Application.Interfaces.Repositories;
 using MiniMarket.Application.Validators;
 using MiniMarket.Infrastructure;
 using MiniMarket.Infrastructure.Persistence;
@@ -66,22 +68,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSettings.Issuer,
             ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
-            // El access token dura pocos minutos: la tolerancia por defecto (5 min) sería una fracción enorme de su vida.
             ClockSkew = TimeSpan.FromSeconds(30),
-            // El claim "rol" (ver TenantClaimTypes) se emite con nombre corto, no como el URI estándar de ClaimTypes.Role.
-            // Es informativo: el acceso se decide por permisos ([HasPermission]), no por rol.
             RoleClaimType = TenantClaimTypes.Rol
         };
     });
 
-// Autorización por permisos: [HasPermission(Permisos.X)] → política "perm:x" → PermissionHandler (claims "permiso").
+// Autorización por permisos
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, JsonAuthorizationResultHandler>();
 
-// Limita login/refresh por IP (fuerza bruta distribuida entre cuentas; el bloqueo de cuenta cubre un mismo usuario).
-// Detrás de un proxy inverso hay que configurar ForwardedHeaders para que RemoteIpAddress sea la IP real del cliente.
+// Limita login/refresh por IP (Soporta cabeceras reenviadas de Azure)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -96,34 +94,48 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-const string CorsPolicyDev = "DevCors";
+// --- Configuración de CORS Dinámica (Soporta desarrollo y producción en Azure) ---
+const string CorsPolicyName = "ProductionOrDevCors";
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+                     ?? new[] { "http://localhost:4200" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(CorsPolicyDev, policy =>
-        policy.WithOrigins("http://localhost:4200")
+    options.AddPolicy(CorsPolicyName, policy =>
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
 
 var app = builder.Build();
 
-// --- Migraciones + seed (solo Development ejecuta el seed; las migraciones corren siempre) ---
+// --- Migraciones + seed ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Falta la connection string 'DefaultConnection'.");
 DatabaseMigrator.ApplyMigrations(connectionString);
 
-// El catálogo de permisos se sincroniza en TODOS los entornos (antes del seed, que asigna permisos por defecto).
 await PermisoCatalogSync.SyncAsync(app.Services.GetRequiredService<IDbConnectionFactory>());
 
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
-    var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
-    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await DataSeeder.SeedAsync(connectionFactory, passwordHasher);
+    await DataSeeder.SeedAsync(
+        scope.ServiceProvider.GetRequiredService<IEmpresaRepository>(),
+        scope.ServiceProvider.GetRequiredService<ISucursalRepository>(),
+        scope.ServiceProvider.GetRequiredService<IRolRepository>(),
+        scope.ServiceProvider.GetRequiredService<IUsuarioRepository>(),
+        scope.ServiceProvider.GetRequiredService<ICategoriaRepository>(),
+        scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
 }
 
 // --- Pipeline HTTP ---
+
+// 1. IMPORTANTE: Forwarded Headers debe ir primero para que Azure pase las IPs reales y esquema HTTPS
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -131,10 +143,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors(CorsPolicyDev);
-// Auditoría de actividad: va por fuera del manejo de excepciones para registrar el código de estado final.
+app.UseCors(CorsPolicyName);
+
+// Auditoría y excepciones
 app.UseMiddleware<AuditoriaMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();

@@ -38,3 +38,6 @@ public record AuditoriaFiltro(DateTime? Desde, DateTime? Hasta, int? UsuarioId, 
 public record EventoClienteDto(string Tipo, DateTime? FechaUtc, string? Ruta, string? Detalle, Dictionary<string, string?>? Datos);
 
 public record PaginaResultado<T>(IReadOnlyList<T> Items, int Total, int Pagina, int TamanoPagina);
+
+/// <summary>Bandera de auditoría de la empresa actual (market.Parametro, SucursalId = 0).</summary>
+public record AuditoriaEstadoDto(bool Habilitada);

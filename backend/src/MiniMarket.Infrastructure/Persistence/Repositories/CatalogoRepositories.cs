@@ -1,8 +1,16 @@
+using System.Data;
 using Dapper;
 using MiniMarket.Application.Interfaces.Repositories;
 using MiniMarket.Domain.Entities;
 
 namespace MiniMarket.Infrastructure.Persistence.Repositories;
+
+// NOTA IMPORTANTE sobre CommandType.StoredProcedure: a diferencia de CommandType.Text (donde un
+// parámetro de más simplemente no se usa), SQL Server rechaza con el error 8144 "has too many
+// arguments specified" si se envía un parámetro que no existe en la firma del procedure. Por eso
+// aquí nunca se pasa una entidad completa como parámetros (traería columnas como Id que el
+// procedure de creación no declara): siempre se arma un objeto anónimo con exactamente los
+// parámetros que el procedure espera.
 
 public class CategoriaRepository : ICategoriaRepository
 {
@@ -13,7 +21,7 @@ public class CategoriaRepository : ICategoriaRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         var items = await connection.QueryAsync<Categoria>(
-            "SELECT * FROM Categoria WHERE EmpresaId = @empresaId ORDER BY Nombre", new { empresaId });
+            "market.usp_Categoria_Listar", new { empresaId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -21,35 +29,34 @@ public class CategoriaRepository : ICategoriaRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Categoria>(
-            "SELECT * FROM Categoria WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+            "market.usp_Categoria_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> CrearAsync(Categoria categoria)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            INSERT INTO Categoria (EmpresaId, Nombre, Descripcion, Estado, CreadoPorUsuarioId, FechaCreacion)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @Nombre, @Descripcion, @Estado, @CreadoPorUsuarioId, @FechaCreacion)
-            """;
-        return await connection.QuerySingleAsync<int>(sql, categoria);
+        return await connection.QuerySingleAsync<int>("market.usp_Categoria_Crear", new
+        {
+            categoria.EmpresaId, categoria.Nombre, categoria.Descripcion, categoria.Estado,
+            categoria.CreadoPorUsuarioId, categoria.FechaCreacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarAsync(Categoria categoria)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE Categoria SET Nombre = @Nombre, Descripcion = @Descripcion,
-                ModificadoPorUsuarioId = @ModificadoPorUsuarioId, FechaModificacion = @FechaModificacion
-            WHERE Id = @Id AND EmpresaId = @EmpresaId
-            """;
-        await connection.ExecuteAsync(sql, categoria);
+        await connection.ExecuteAsync("market.usp_Categoria_Actualizar", new
+        {
+            categoria.Id, categoria.EmpresaId, categoria.Nombre, categoria.Descripcion,
+            categoria.ModificadoPorUsuarioId, categoria.FechaModificacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task CambiarEstadoAsync(int empresaId, int id, string estado)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync("UPDATE Categoria SET Estado = @estado WHERE Id = @id AND EmpresaId = @empresaId", new { empresaId, id, estado });
+        await connection.ExecuteAsync(
+            "market.usp_Categoria_CambiarEstado", new { empresaId, id, estado }, commandType: CommandType.StoredProcedure);
     }
 }
 
@@ -62,7 +69,7 @@ public class ProveedorRepository : IProveedorRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         var items = await connection.QueryAsync<Proveedor>(
-            "SELECT * FROM Proveedor WHERE EmpresaId = @empresaId ORDER BY Nombre", new { empresaId });
+            "market.usp_Proveedor_Listar", new { empresaId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -70,36 +77,36 @@ public class ProveedorRepository : IProveedorRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Proveedor>(
-            "SELECT * FROM Proveedor WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+            "market.usp_Proveedor_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> CrearAsync(Proveedor proveedor)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            INSERT INTO Proveedor (EmpresaId, Nombre, Contacto, Telefono, Email, Direccion, IdentificacionFiscal, Estado, CreadoPorUsuarioId, FechaCreacion)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @Nombre, @Contacto, @Telefono, @Email, @Direccion, @IdentificacionFiscal, @Estado, @CreadoPorUsuarioId, @FechaCreacion)
-            """;
-        return await connection.QuerySingleAsync<int>(sql, proveedor);
+        return await connection.QuerySingleAsync<int>("market.usp_Proveedor_Crear", new
+        {
+            proveedor.EmpresaId, proveedor.Nombre, proveedor.Contacto, proveedor.Telefono, proveedor.Email,
+            proveedor.Direccion, proveedor.IdentificacionFiscal, proveedor.Estado,
+            proveedor.CreadoPorUsuarioId, proveedor.FechaCreacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarAsync(Proveedor proveedor)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE Proveedor SET Nombre = @Nombre, Contacto = @Contacto, Telefono = @Telefono, Email = @Email,
-                Direccion = @Direccion, IdentificacionFiscal = @IdentificacionFiscal,
-                ModificadoPorUsuarioId = @ModificadoPorUsuarioId, FechaModificacion = @FechaModificacion
-            WHERE Id = @Id AND EmpresaId = @EmpresaId
-            """;
-        await connection.ExecuteAsync(sql, proveedor);
+        await connection.ExecuteAsync("market.usp_Proveedor_Actualizar", new
+        {
+            proveedor.Id, proveedor.EmpresaId, proveedor.Nombre, proveedor.Contacto, proveedor.Telefono,
+            proveedor.Email, proveedor.Direccion, proveedor.IdentificacionFiscal,
+            proveedor.ModificadoPorUsuarioId, proveedor.FechaModificacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task CambiarEstadoAsync(int empresaId, int id, string estado)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync("UPDATE Proveedor SET Estado = @estado WHERE Id = @id AND EmpresaId = @empresaId", new { empresaId, id, estado });
+        await connection.ExecuteAsync(
+            "market.usp_Proveedor_CambiarEstado", new { empresaId, id, estado }, commandType: CommandType.StoredProcedure);
     }
 }
 
@@ -112,7 +119,7 @@ public class ClienteRepository : IClienteRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         var items = await connection.QueryAsync<Cliente>(
-            "SELECT * FROM Cliente WHERE EmpresaId = @empresaId ORDER BY Nombre", new { empresaId });
+            "market.usp_Cliente_Listar", new { empresaId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -120,35 +127,33 @@ public class ClienteRepository : IClienteRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Cliente>(
-            "SELECT * FROM Cliente WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+            "market.usp_Cliente_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> CrearAsync(Cliente cliente)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            INSERT INTO Cliente (EmpresaId, Nombre, IdentificacionFiscal, Telefono, Email, Direccion, Estado, CreadoPorUsuarioId, FechaCreacion)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @Nombre, @IdentificacionFiscal, @Telefono, @Email, @Direccion, @Estado, @CreadoPorUsuarioId, @FechaCreacion)
-            """;
-        return await connection.QuerySingleAsync<int>(sql, cliente);
+        return await connection.QuerySingleAsync<int>("market.usp_Cliente_Crear", new
+        {
+            cliente.EmpresaId, cliente.Nombre, cliente.IdentificacionFiscal, cliente.Telefono, cliente.Email,
+            cliente.Direccion, cliente.Estado, cliente.CreadoPorUsuarioId, cliente.FechaCreacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarAsync(Cliente cliente)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE Cliente SET Nombre = @Nombre, IdentificacionFiscal = @IdentificacionFiscal, Telefono = @Telefono,
-                Email = @Email, Direccion = @Direccion,
-                ModificadoPorUsuarioId = @ModificadoPorUsuarioId, FechaModificacion = @FechaModificacion
-            WHERE Id = @Id AND EmpresaId = @EmpresaId
-            """;
-        await connection.ExecuteAsync(sql, cliente);
+        await connection.ExecuteAsync("market.usp_Cliente_Actualizar", new
+        {
+            cliente.Id, cliente.EmpresaId, cliente.Nombre, cliente.IdentificacionFiscal, cliente.Telefono,
+            cliente.Email, cliente.Direccion, cliente.ModificadoPorUsuarioId, cliente.FechaModificacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task CambiarEstadoAsync(int empresaId, int id, string estado)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync("UPDATE Cliente SET Estado = @estado WHERE Id = @id AND EmpresaId = @empresaId", new { empresaId, id, estado });
+        await connection.ExecuteAsync(
+            "market.usp_Cliente_CambiarEstado", new { empresaId, id, estado }, commandType: CommandType.StoredProcedure);
     }
 }

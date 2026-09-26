@@ -3,6 +3,7 @@
   <p-button label="Nueva compra" icon="pi pi-plus" (onClick)="nuevaCompra()" />
 </div>
 
+<div class="mm-table-wrap">
 <p-table [value]="compras()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
   <ng-template #header>
     <tr>
@@ -29,6 +30,7 @@
     </tr>
   </ng-template>
 </p-table>
+</div>
 
 <p-dialog header="Nueva compra" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '36rem' }">
   <div class="flex flex-col gap-3">
@@ -52,7 +54,7 @@
         producto — no hace falta multiplicar nada a mano.
       </p>
       @if (detalles.length > 0) {
-        <div class="grid grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1">
+        <div class="hidden sm:grid sm:grid-cols-12 gap-2 mb-1 text-xs text-surface-400 px-1">
           <span class="col-span-3">Producto</span>
           <span class="col-span-3">Unidad de medida</span>
           <span class="col-span-2">Cantidad</span>
@@ -61,9 +63,9 @@
         </div>
       }
       @for (linea of detalles; track $index) {
-        <div class="grid grid-cols-12 gap-2 items-center mb-2">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:items-center mb-3 sm:mb-2 pb-3 sm:pb-0 border-b sm:border-0 border-surface-200 dark:border-surface-700">
           <p-select appendTo="body"
-            class="col-span-3"
+            class="sm:col-span-3"
             [ngModel]="linea.productoId"
             (ngModelChange)="onProductoChange(linea, $event)"
             [options]="productos()"
@@ -74,7 +76,7 @@
             [filter]="true"
           />
           <p-select appendTo="body"
-            class="col-span-3"
+            class="sm:col-span-3"
             [ngModel]="linea.tipoPrecioId"
             (ngModelChange)="onTipoPrecioChange(linea, $event)"
             [options]="presentacionesDe(linea.productoId)"
@@ -85,15 +87,17 @@
             <ng-template let-tp #item>{{ tp.nombre }} (x{{ tp.cantidadBase }})</ng-template>
             <ng-template let-tp #selectedItem>{{ tp.nombre }} (x{{ tp.cantidadBase }})</ng-template>
           </p-select>
-          <input type="number" min="0" step="0.01" class="mm-input-number col-span-2" placeholder="Cantidad" [(ngModel)]="linea.cantidad" />
-          <div class="col-span-2 flex flex-col">
+          <input type="number" min="0" step="0.01" class="mm-input-number sm:col-span-2" placeholder="Cantidad" [(ngModel)]="linea.cantidad" />
+          <div class="sm:col-span-2 flex flex-col">
             <input type="number" min="0" step="0.01" class="mm-input-number" placeholder="Precio" [(ngModel)]="linea.costoUnidadMedida" />
             @if (linea.tipoPrecioId) {
               <span class="text-xs text-surface-400 mt-0.5">≈ {{ costoPorUnidadBase(linea) | moneda }} c/u base</span>
             }
           </div>
-          <span class="col-span-1 text-sm text-right">{{ subtotalLinea(linea) | moneda }}</span>
-          <p-button class="col-span-1" icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarLinea($index)" />
+          <div class="flex items-center justify-between gap-2 sm:col-span-1 sm:contents">
+            <span class="text-sm sm:text-right">Subtotal: {{ subtotalLinea(linea) | moneda }}</span>
+            <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="quitarLinea($index)" />
+          </div>
         </div>
       }
     </div>

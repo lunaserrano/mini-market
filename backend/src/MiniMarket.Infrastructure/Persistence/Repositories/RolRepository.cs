@@ -16,20 +16,21 @@ public class RolRepository : IRolRepository
         _connectionFactory = connectionFactory;
     }
 
+    private static DataTable CodigosATabla(IEnumerable<string> codigos)
+    {
+        var tabla = new DataTable();
+        tabla.Columns.Add("Codigo", typeof(string));
+        foreach (var codigo in codigos.Distinct())
+            tabla.Rows.Add(codigo);
+        return tabla;
+    }
+
     public async Task<IReadOnlyList<RolDto>> ListarAsync(int empresaId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         // El admin no tiene filas en RolPermiso: su total es el del catálogo completo.
-        const string sql = """
-            SELECT r.Id, r.Codigo, r.Nombre, r.Descripcion, r.EsSistema,
-                   (SELECT COUNT(*) FROM Usuario u WHERE u.RolId = r.Id) AS TotalUsuarios,
-                   CASE WHEN r.EsSistema = 1 AND r.Codigo = 'admin' THEN @totalCatalogo
-                        ELSE (SELECT COUNT(*) FROM RolPermiso rp WHERE rp.RolId = r.Id) END AS TotalPermisos
-            FROM RolCatalogo r
-            WHERE r.EmpresaId = @empresaId AND r.Estado = 'A'
-            ORDER BY r.EsSistema DESC, r.Nombre
-            """;
-        var roles = await connection.QueryAsync<RolDto>(sql, new { empresaId, totalCatalogo = Permisos.Todos.Count });
+        var roles = await connection.QueryAsync<RolDto>(
+            "market.usp_Rol_Listar", new { empresaId, totalCatalogo = Permisos.Todos.Count }, commandType: CommandType.StoredProcedure);
         return roles.AsList();
     }
 
@@ -37,85 +38,62 @@ public class RolRepository : IRolRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<RolCatalogo>(
-            "SELECT * FROM RolCatalogo WHERE EmpresaId = @empresaId AND Id = @id AND Estado = 'A'",
-            new { empresaId, id });
+            "market.usp_Rol_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<IReadOnlyList<string>> ObtenerCodigosPermisosAsync(int rolId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        var codigos = await connection.QueryAsync<string>("""
-            SELECT p.Codigo FROM RolPermiso rp JOIN Permiso p ON p.Id = rp.PermisoId
-            WHERE rp.RolId = @rolId ORDER BY p.Codigo
-            """, new { rolId });
+        var codigos = await connection.QueryAsync<string>(
+            "market.usp_Rol_ObtenerCodigosPermisos", new { rolId }, commandType: CommandType.StoredProcedure);
         return codigos.AsList();
     }
 
     public async Task<int> CrearAsync(RolCatalogo rol, IReadOnlyCollection<string> permisos)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        using var transaction = connection.BeginTransaction();
 
-        var id = await connection.QuerySingleAsync<int>("""
-            INSERT INTO RolCatalogo (EmpresaId, Codigo, Nombre, Descripcion, EsSistema, Estado, CreadoPorUsuarioId, FechaCreacion)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @Codigo, @Nombre, @Descripcion, @EsSistema, @Estado, @CreadoPorUsuarioId, @FechaCreacion)
-            """, rol, transaction);
+        var parametros = new DynamicParameters();
+        parametros.Add("@EmpresaId", rol.EmpresaId);
+        parametros.Add("@Codigo", rol.Codigo);
+        parametros.Add("@Nombre", rol.Nombre);
+        parametros.Add("@Descripcion", rol.Descripcion);
+        parametros.Add("@EsSistema", rol.EsSistema);
+        parametros.Add("@Estado", rol.Estado);
+        parametros.Add("@CreadoPorUsuarioId", rol.CreadoPorUsuarioId);
+        parametros.Add("@FechaCreacion", rol.FechaCreacion);
+        parametros.Add("@Permisos", CodigosATabla(permisos).AsTableValuedParameter("market.CodigoListType"));
 
-        await InsertarPermisosAsync(connection, transaction, id, permisos);
-        transaction.Commit();
-        return id;
+        return await connection.QuerySingleAsync<int>("market.usp_Rol_Crear", parametros, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarAsync(RolCatalogo rol, IReadOnlyCollection<string>? permisos)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        using var transaction = connection.BeginTransaction();
 
-        await connection.ExecuteAsync("""
-            UPDATE RolCatalogo SET Nombre = @Nombre, Descripcion = @Descripcion,
-                ModificadoPorUsuarioId = @ModificadoPorUsuarioId, FechaModificacion = @FechaModificacion
-            WHERE Id = @Id AND EmpresaId = @EmpresaId
-            """, rol, transaction);
+        var parametros = new DynamicParameters();
+        parametros.Add("@Id", rol.Id);
+        parametros.Add("@EmpresaId", rol.EmpresaId);
+        parametros.Add("@Nombre", rol.Nombre);
+        parametros.Add("@Descripcion", rol.Descripcion);
+        parametros.Add("@ModificadoPorUsuarioId", rol.ModificadoPorUsuarioId);
+        parametros.Add("@FechaModificacion", rol.FechaModificacion);
+        parametros.Add("@ActualizarPermisos", permisos is not null);
+        parametros.Add("@Permisos", CodigosATabla(permisos ?? Array.Empty<string>()).AsTableValuedParameter("market.CodigoListType"));
 
-        if (permisos is not null)
-        {
-            await connection.ExecuteAsync("DELETE FROM RolPermiso WHERE RolId = @Id", new { rol.Id }, transaction);
-            await InsertarPermisosAsync(connection, transaction, rol.Id, permisos);
-        }
-
-        transaction.Commit();
+        await connection.ExecuteAsync("market.usp_Rol_Actualizar", parametros, commandType: CommandType.StoredProcedure);
     }
 
     public async Task EliminarAsync(int empresaId, int id)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        using var transaction = connection.BeginTransaction();
-
-        // El filtro por empresa y EsSistema = 0 protege también a nivel de SQL: nunca se borra un rol de sistema ni ajeno.
-        await connection.ExecuteAsync("""
-            DELETE rp FROM RolPermiso rp JOIN RolCatalogo r ON r.Id = rp.RolId
-            WHERE r.Id = @id AND r.EmpresaId = @empresaId AND r.EsSistema = 0
-            """, new { empresaId, id }, transaction);
-        await connection.ExecuteAsync(
-            "DELETE FROM RolCatalogo WHERE Id = @id AND EmpresaId = @empresaId AND EsSistema = 0",
-            new { empresaId, id }, transaction);
-
-        transaction.Commit();
+        await connection.ExecuteAsync("market.usp_Rol_Eliminar", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> ContarUsuariosAsync(int empresaId, int rolId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleAsync<int>(
-            "SELECT COUNT(*) FROM Usuario WHERE EmpresaId = @empresaId AND RolId = @rolId", new { empresaId, rolId });
-    }
-
-    private static Task InsertarPermisosAsync(IDbConnection connection, IDbTransaction transaction, int rolId, IReadOnlyCollection<string> permisos)
-    {
-        if (permisos.Count == 0) return Task.CompletedTask;
-        return connection.ExecuteAsync(
-            "INSERT INTO RolPermiso (RolId, PermisoId) SELECT @rolId, Id FROM Permiso WHERE Codigo IN @permisos",
-            new { rolId, permisos }, transaction);
+            "market.usp_Rol_ContarUsuarios", new { empresaId, rolId }, commandType: CommandType.StoredProcedure);
     }
 }

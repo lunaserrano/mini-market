@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using MiniMarket.Application.DTOs;
 using MiniMarket.Application.Interfaces.Repositories;
@@ -7,13 +8,6 @@ namespace MiniMarket.Infrastructure.Persistence.Repositories;
 
 public class EventoSeguridadRepository : IEventoSeguridadRepository
 {
-    private const string InsertSql = """
-        INSERT INTO EventoSeguridad (EmpresaId, ActorUsuarioId, UsuarioObjetivoId, Tipo, Detalle, Ip, UserAgent, FechaUtc,
-                                     Origen, Metodo, Ruta, StatusCode, DuracionMs, Datos)
-        VALUES (@EmpresaId, @ActorUsuarioId, @UsuarioObjetivoId, @Tipo, @Detalle, @Ip, @UserAgent, @FechaUtc,
-                @Origen, @Metodo, @Ruta, @StatusCode, @DuracionMs, @Datos)
-        """;
-
     private readonly IDbConnectionFactory _connectionFactory;
 
     public EventoSeguridadRepository(IDbConnectionFactory connectionFactory)
@@ -24,30 +18,57 @@ public class EventoSeguridadRepository : IEventoSeguridadRepository
     public async Task RegistrarAsync(EventoSeguridad evento)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync(InsertSql, evento);
+        await connection.ExecuteAsync("market.usp_EventoSeguridad_Registrar", new
+        {
+            evento.EmpresaId, evento.ActorUsuarioId, evento.UsuarioObjetivoId, evento.Tipo, evento.Detalle,
+            evento.Ip, evento.UserAgent, evento.FechaUtc, evento.Origen, evento.Metodo, evento.Ruta,
+            evento.StatusCode, evento.DuracionMs, evento.Datos
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task RegistrarLoteAsync(IReadOnlyCollection<EventoSeguridad> eventos)
     {
         if (eventos.Count == 0) return;
+
+        // market.EventoSeguridadListType es un table-valued parameter: SQL Server empareja sus columnas
+        // por POSICIÓN, no por nombre, así que el orden de Columns.Add aquí debe calzar exactamente
+        // con el CREATE TYPE (ver database/schema/market/02_types.sql).
+        var tabla = new DataTable();
+        tabla.Columns.Add("EmpresaId", typeof(int));
+        tabla.Columns.Add("ActorUsuarioId", typeof(int));
+        tabla.Columns.Add("UsuarioObjetivoId", typeof(int));
+        tabla.Columns.Add("Tipo", typeof(string));
+        tabla.Columns.Add("Detalle", typeof(string));
+        tabla.Columns.Add("Ip", typeof(string));
+        tabla.Columns.Add("UserAgent", typeof(string));
+        tabla.Columns.Add("FechaUtc", typeof(DateTime));
+        tabla.Columns.Add("Origen", typeof(string));
+        tabla.Columns.Add("Metodo", typeof(string));
+        tabla.Columns.Add("Ruta", typeof(string));
+        tabla.Columns.Add("StatusCode", typeof(short));
+        tabla.Columns.Add("DuracionMs", typeof(int));
+        tabla.Columns.Add("Datos", typeof(string));
+
+        foreach (var e in eventos)
+        {
+            tabla.Rows.Add(
+                (object?)e.EmpresaId ?? DBNull.Value, (object?)e.ActorUsuarioId ?? DBNull.Value,
+                (object?)e.UsuarioObjetivoId ?? DBNull.Value, e.Tipo, (object?)e.Detalle ?? DBNull.Value,
+                (object?)e.Ip ?? DBNull.Value, (object?)e.UserAgent ?? DBNull.Value, e.FechaUtc, e.Origen,
+                (object?)e.Metodo ?? DBNull.Value, (object?)e.Ruta ?? DBNull.Value,
+                (object?)e.StatusCode ?? DBNull.Value, (object?)e.DuracionMs ?? DBNull.Value, (object?)e.Datos ?? DBNull.Value);
+        }
+
+        var parametros = new DynamicParameters();
+        parametros.Add("@Eventos", tabla.AsTableValuedParameter("market.EventoSeguridadListType"));
+
         using var connection = _connectionFactory.CreateOpenConnection();
-        using var transaction = connection.BeginTransaction();
-        await connection.ExecuteAsync(InsertSql, eventos, transaction);
-        transaction.Commit();
+        await connection.ExecuteAsync("market.usp_EventoSeguridad_RegistrarLote", parametros, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<PaginaResultado<EventoSeguridadDto>> ListarAsync(int empresaId, AuditoriaFiltro filtro)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-
-        const string where = """
-            WHERE e.EmpresaId = @empresaId
-              AND (@desde IS NULL OR e.FechaUtc >= @desde)
-              AND (@hasta IS NULL OR e.FechaUtc <= @hasta)
-              AND (@usuarioId IS NULL OR e.ActorUsuarioId = @usuarioId OR e.UsuarioObjetivoId = @usuarioId)
-              AND (@tipo IS NULL OR e.Tipo = @tipo)
-              AND (@origen IS NULL OR e.Origen = @origen)
-            """;
 
         var parametros = new
         {
@@ -58,22 +79,14 @@ public class EventoSeguridadRepository : IEventoSeguridadRepository
             tipo = filtro.Tipo,
             origen = filtro.Origen,
             offset = (filtro.Pagina - 1) * filtro.TamanoPagina,
-            tamano = filtro.TamanoPagina
+            tamanoPagina = filtro.TamanoPagina
         };
 
-        var total = await connection.QuerySingleAsync<int>($"SELECT COUNT(*) FROM EventoSeguridad e {where}", parametros);
+        using var multi = await connection.QueryMultipleAsync(
+            "market.usp_EventoSeguridad_Listar", parametros, commandType: CommandType.StoredProcedure);
 
-        var filas = await connection.QueryAsync<EventoFila>($"""
-            SELECT e.Id, e.FechaUtc, e.Tipo, e.Detalle, e.ActorUsuarioId, ua.NombreCompleto AS ActorNombre,
-                   e.UsuarioObjetivoId, uo.NombreCompleto AS ObjetivoNombre, e.Ip,
-                   e.Origen, e.Metodo, e.Ruta, e.StatusCode, e.DuracionMs, e.Datos
-            FROM EventoSeguridad e
-            LEFT JOIN Usuario ua ON ua.Id = e.ActorUsuarioId
-            LEFT JOIN Usuario uo ON uo.Id = e.UsuarioObjetivoId
-            {where}
-            ORDER BY e.FechaUtc DESC, e.Id DESC
-            OFFSET @offset ROWS FETCH NEXT @tamano ROWS ONLY
-            """, parametros);
+        var total = await multi.ReadSingleAsync<int>();
+        var filas = await multi.ReadAsync<EventoFila>();
 
         // FechaUtc llega con Kind=Unspecified; se marca como UTC para que el JSON lleve "Z".
         var items = filas.Select(f => new EventoSeguridadDto(

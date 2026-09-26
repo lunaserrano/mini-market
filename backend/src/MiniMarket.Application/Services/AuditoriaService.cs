@@ -15,20 +15,32 @@ public class AuditoriaService
     private static readonly TimeSpan AntiguedadMaximaCliente = TimeSpan.FromMinutes(30);
 
     private readonly IEventoSeguridadRepository _repository;
+    private readonly IParametroRepository _parametros;
     private readonly ITenantContext _tenant;
     private readonly IAuditoriaCola _cola;
     private readonly IRequestInfo _request;
     private readonly TimeProvider _time;
+    private readonly IAuditoriaEstadoProvider _estado;
 
     public AuditoriaService(
-        IEventoSeguridadRepository repository, ITenantContext tenant, IAuditoriaCola cola, IRequestInfo request, TimeProvider time)
+        IEventoSeguridadRepository repository, IParametroRepository parametros, ITenantContext tenant, IAuditoriaCola cola,
+        IRequestInfo request, TimeProvider time, IAuditoriaEstadoProvider estado)
     {
         _repository = repository;
+        _parametros = parametros;
         _tenant = tenant;
         _cola = cola;
         _request = request;
         _time = time;
+        _estado = estado;
     }
+
+    /// <summary>Bandera de auditoría de la empresa actual (SucursalId = 0: valor de toda la empresa).</summary>
+    public async Task<AuditoriaEstadoDto> ObtenerEstadoAsync() =>
+        new(await _parametros.ObtenerAuditoriaHabilitadaAsync(_tenant.EmpresaId, sucursalId: 0) ?? true);
+
+    public Task ActualizarEstadoAsync(AuditoriaEstadoDto dto) =>
+        _parametros.ActualizarAuditoriaHabilitadaAsync(_tenant.EmpresaId, sucursalId: 0, dto.Habilitada, _tenant.UsuarioId);
 
     public Task<PaginaResultado<EventoSeguridadDto>> ListarAsync(AuditoriaFiltro filtro)
     {
@@ -46,8 +58,10 @@ public class AuditoriaService
     /// Registra las acciones que el navegador reporta (clics, navegación). La empresa y el usuario salen SIEMPRE
     /// del token, nunca del lote, y solo se aceptan tipos de UI: el cliente no puede fabricar eventos de seguridad.
     /// </summary>
-    public void RegistrarEventosCliente(IReadOnlyList<EventoClienteDto> eventos)
+    public async Task RegistrarEventosCliente(IReadOnlyList<EventoClienteDto> eventos)
     {
+        if (!await _estado.EstaHabilitadaAsync(_tenant.EmpresaId, _tenant.SucursalId)) return;
+
         if (eventos.Count > MaxEventosPorLote)
             throw new ReglaDeNegocioException($"Un lote admite como máximo {MaxEventosPorLote} eventos.");
 

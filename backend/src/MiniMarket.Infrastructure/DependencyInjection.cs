@@ -25,6 +25,9 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(configuration.GetSection(SeguridadOptions.SectionName).Get<SeguridadOptions>() ?? new SeguridadOptions());
+        services.AddSingleton(configuration.GetSection(AuditoriaOptions.SectionName).Get<AuditoriaOptions>() ?? new AuditoriaOptions());
+        services.AddMemoryCache();
+        services.AddScoped<IAuditoriaEstadoProvider, AuditoriaEstadoProvider>();
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
@@ -41,7 +44,9 @@ public static class DependencyInjection
         services.AddScoped<IRolRepository, RolRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IEventoSeguridadRepository, EventoSeguridadRepository>();
+        services.AddScoped<IParametroRepository, ParametroRepository>();
         services.AddScoped<IEmpresaRepository, EmpresaRepository>();
+        services.AddScoped<ISucursalRepository, SucursalRepository>();
         services.AddScoped<ICategoriaRepository, CategoriaRepository>();
         services.AddScoped<IProveedorRepository, ProveedorRepository>();
         services.AddScoped<IClienteRepository, ClienteRepository>();

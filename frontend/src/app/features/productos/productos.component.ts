@@ -16,6 +16,8 @@ import { ProductoService } from '../../core/services/producto.service';
 import { Categoria } from '../../core/models/catalogo.models';
 import { Producto, TipoPrecioCreate, TipoPrecio } from '../../core/models/producto.models';
 import { MonedaPipe } from '../../core/pipes/moneda.pipe';
+import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
+import { esDispositivoTactil } from '../../shared/utils/device.utils';
 
 interface FormularioProducto {
   categoriaId: number | null;
@@ -50,7 +52,8 @@ export const UNIDADES_BASE_SUGERIDAS = ['unidad', 'libra', 'kilogramo', 'gramo',
     TableModule,
     TagModule,
     CheckboxModule,
-    ConfirmDialogModule
+    ConfirmDialogModule,
+    BarcodeScannerComponent
   ],
   providers: [ConfirmationService],
   templateUrl: './productos.component.html'
@@ -64,6 +67,11 @@ export class ProductosComponent implements OnInit {
   editandoId: number | null = null;
   formulario: FormularioProducto = this.formularioVacio();
   readonly unidadesBaseSugeridas = UNIDADES_BASE_SUGERIDAS;
+
+  /** Solo en dispositivos táctiles se ofrece escanear el código de barras con la cámara — en
+   * escritorio se sigue usando la pistola láser física, que escribe directo en el input. */
+  readonly esTactil = esDispositivoTactil();
+  readonly mostrarEscaner = signal(false);
 
   /** Factor para convertir precio sin IVA <-> con IVA, usando la tasa única configurada en Configuración. */
   readonly factorImpuesto = computed(() => 1 + this.configService.tasaImpuesto() / 100);
@@ -132,6 +140,11 @@ export class ProductosComponent implements OnInit {
     this.tiposPrecioExistentes.set(producto.tiposPrecio);
     this.nuevoTipoPrecio = this.tipoPrecioVacio();
     this.mostrarFormulario.set(true);
+  }
+
+  onCodigoEscaneado(codigo: string): void {
+    this.formulario.codigoBarras = codigo;
+    this.mostrarEscaner.set(false);
   }
 
   private tipoPrecioVacio(): FilaTipoPrecio {

@@ -34,9 +34,13 @@ public class AuditoriaMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IAuditoriaCola cola, TimeProvider time)
+    public async Task InvokeAsync(HttpContext context, IAuditoriaCola cola, TimeProvider time, AuditoriaOptions opciones, IAuditoriaEstadoProvider estado)
     {
-        if (Omitir(context.Request))
+        // El interruptor global de appsettings se revisa aquí (barato, sin BD): si está apagado ni
+        // siquiera se lee el cuerpo de la petición. El override por empresa/sucursal en market.Parametro
+        // solo se conoce tras UseAuthentication (más abajo en el pipeline), así que ese se revisa en el
+        // finally, justo antes de encolar.
+        if (!opciones.Habilitada || Omitir(context.Request))
         {
             await _next(context);
             return;
@@ -55,7 +59,11 @@ public class AuditoriaMiddleware
             cronometro.Stop();
             try
             {
-                if (!cola.Encolar(Construir(context, inicio, cronometro.ElapsedMilliseconds, cuerpo)))
+                var empresaId = LeerEntero(context, TenantClaimTypes.EmpresaId);
+                var sucursalId = LeerEntero(context, TenantClaimTypes.SucursalId);
+
+                if (await estado.EstaHabilitadaAsync(empresaId, sucursalId)
+                    && !cola.Encolar(Construir(context, inicio, cronometro.ElapsedMilliseconds, cuerpo, empresaId)))
                     _logger.LogWarning("Cola de auditoría llena: se perdió el registro de {Metodo} {Ruta}", context.Request.Method, context.Request.Path);
             }
             catch (Exception ex)
@@ -85,7 +93,7 @@ public class AuditoriaMiddleware
         return texto;
     }
 
-    private static EventoSeguridad Construir(HttpContext context, DateTime inicioUtc, long duracionMs, string? cuerpo)
+    private static EventoSeguridad Construir(HttpContext context, DateTime inicioUtc, long duracionMs, string? cuerpo, int? empresaId)
     {
         var request = context.Request;
         var accion = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
@@ -93,7 +101,7 @@ public class AuditoriaMiddleware
 
         return new EventoSeguridad
         {
-            EmpresaId = LeerEntero(context, TenantClaimTypes.EmpresaId),
+            EmpresaId = empresaId,
             ActorUsuarioId = LeerEntero(context, TenantClaimTypes.UsuarioId),
             Tipo = TipoEventoSeguridad.AccionApi,
             Origen = OrigenEvento.Api,

@@ -8,9 +8,6 @@ namespace MiniMarket.Infrastructure.Persistence.Repositories;
 
 public class CreditoRepository : ICreditoRepository
 {
-    private const string VencidoSql =
-        "CAST(CASE WHEN cr.Estado = 'PENDIENTE' AND cr.FechaVencimiento IS NOT NULL AND cr.FechaVencimiento < SYSUTCDATETIME() THEN 1 ELSE 0 END AS bit)";
-
     private readonly IDbConnectionFactory _connectionFactory;
 
     public CreditoRepository(IDbConnectionFactory connectionFactory)
@@ -20,97 +17,65 @@ public class CreditoRepository : ICreditoRepository
 
     public async Task<int> CrearAsync(Credito credito, IDbTransaction transaction)
     {
-        const string sql = """
-            INSERT INTO Credito (EmpresaId, VentaId, ClienteId, MontoOriginal, SaldoPendiente, Estado,
-                FechaVencimiento, FechaCreacion, CreadoPorUsuarioId)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @VentaId, @ClienteId, @MontoOriginal, @SaldoPendiente, @Estado,
-                @FechaVencimiento, @FechaCreacion, @CreadoPorUsuarioId)
-            """;
-        return await transaction.Connection!.QuerySingleAsync<int>(sql, credito, transaction);
+        return await transaction.Connection!.QuerySingleAsync<int>("market.usp_Credito_Crear", new
+        {
+            credito.EmpresaId, credito.VentaId, credito.ClienteId, credito.MontoOriginal, credito.SaldoPendiente,
+            credito.Estado, credito.FechaVencimiento, credito.FechaCreacion, credito.CreadoPorUsuarioId
+        }, transaction, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<Credito?> ObtenerParaActualizarAsync(int empresaId, int id, IDbTransaction transaction)
     {
-        const string sql = "SELECT * FROM Credito WITH (UPDLOCK, ROWLOCK) WHERE EmpresaId = @empresaId AND Id = @id";
-        return await transaction.Connection!.QuerySingleOrDefaultAsync<Credito>(sql, new { empresaId, id }, transaction);
+        return await transaction.Connection!.QuerySingleOrDefaultAsync<Credito>(
+            "market.usp_Credito_ObtenerParaActualizar", new { empresaId, id }, transaction, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<Credito?> ObtenerPorVentaAsync(int ventaId, IDbTransaction transaction)
     {
-        const string sql = "SELECT * FROM Credito WITH (UPDLOCK, ROWLOCK) WHERE VentaId = @ventaId";
-        return await transaction.Connection!.QuerySingleOrDefaultAsync<Credito>(sql, new { ventaId }, transaction);
+        return await transaction.Connection!.QuerySingleOrDefaultAsync<Credito>(
+            "market.usp_Credito_ObtenerPorVenta", new { ventaId }, transaction, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> ContarAbonosAsync(int creditoId, IDbTransaction transaction) =>
         await transaction.Connection!.QuerySingleAsync<int>(
-            "SELECT COUNT(*) FROM AbonoCredito WHERE CreditoId = @creditoId", new { creditoId }, transaction);
+            "market.usp_AbonoCredito_Contar", new { creditoId }, transaction, commandType: CommandType.StoredProcedure);
 
     public async Task RegistrarAbonoAsync(AbonoCredito abono, IDbTransaction transaction)
     {
-        const string sql = """
-            INSERT INTO AbonoCredito (CreditoId, CajaId, UsuarioId, Metodo, Monto, Referencia, Fecha)
-            VALUES (@CreditoId, @CajaId, @UsuarioId, @Metodo, @Monto, @Referencia, @Fecha)
-            """;
-        await transaction.Connection!.ExecuteAsync(sql, abono, transaction);
+        await transaction.Connection!.ExecuteAsync("market.usp_AbonoCredito_Registrar", new
+        {
+            abono.CreditoId, abono.CajaId, abono.UsuarioId, abono.Metodo, abono.Monto, abono.Referencia, abono.Fecha
+        }, transaction, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarSaldoAsync(int id, decimal saldoPendiente, string estado, DateTime? fechaCancelacion, IDbTransaction transaction)
     {
-        const string sql = """
-            UPDATE Credito SET SaldoPendiente = @saldoPendiente, Estado = @estado, FechaCancelacion = @fechaCancelacion
-            WHERE Id = @id
-            """;
-        await transaction.Connection!.ExecuteAsync(sql, new { id, saldoPendiente, estado, fechaCancelacion }, transaction);
+        await transaction.Connection!.ExecuteAsync(
+            "market.usp_Credito_ActualizarSaldo", new { id, saldoPendiente, estado, fechaCancelacion }, transaction,
+            commandType: CommandType.StoredProcedure);
     }
 
     public async Task AnularAsync(int id, IDbTransaction transaction) =>
-        await transaction.Connection!.ExecuteAsync("UPDATE Credito SET Estado = 'ANULADO' WHERE Id = @id", new { id }, transaction);
+        await transaction.Connection!.ExecuteAsync(
+            "market.usp_Credito_Anular", new { id }, transaction, commandType: CommandType.StoredProcedure);
 
     public async Task<IReadOnlyList<CreditoResumenDto>> ListarAsync(int empresaId, int? clienteId, string? estado)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = $"""
-            SELECT cr.Id, cr.VentaId, v.Folio AS VentaFolio, cr.ClienteId, c.Nombre AS ClienteNombre,
-                   cr.FechaCreacion, cr.FechaVencimiento, cr.MontoOriginal, cr.SaldoPendiente, cr.Estado,
-                   {VencidoSql} AS Vencido
-            FROM Credito cr
-            INNER JOIN Venta v ON v.Id = cr.VentaId
-            INNER JOIN Cliente c ON c.Id = cr.ClienteId
-            WHERE cr.EmpresaId = @empresaId
-              AND (@clienteId IS NULL OR cr.ClienteId = @clienteId)
-              AND (@estado IS NULL OR cr.Estado = @estado)
-            ORDER BY CASE WHEN cr.Estado = 'PENDIENTE' THEN 0 ELSE 1 END, cr.FechaCreacion DESC
-            """;
-        var items = await connection.QueryAsync<CreditoResumenDto>(sql, new { empresaId, clienteId, estado });
+        var items = await connection.QueryAsync<CreditoResumenDto>(
+            "market.usp_Credito_Listar", new { empresaId, clienteId, estado }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
     public async Task<CreditoDto?> ObtenerDetalleAsync(int empresaId, int id)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
+        using var multi = await connection.QueryMultipleAsync(
+            "market.usp_Credito_ObtenerDetalle", new { empresaId, id }, commandType: CommandType.StoredProcedure);
 
-        const string sql = $"""
-            SELECT cr.Id, cr.VentaId, v.Folio AS VentaFolio, cr.ClienteId, c.Nombre AS ClienteNombre,
-                   cr.FechaCreacion, cr.FechaVencimiento, cr.FechaCancelacion,
-                   v.Total AS TotalVenta, cr.MontoOriginal, cr.SaldoPendiente, cr.Estado,
-                   {VencidoSql} AS Vencido
-            FROM Credito cr
-            INNER JOIN Venta v ON v.Id = cr.VentaId
-            INNER JOIN Cliente c ON c.Id = cr.ClienteId
-            WHERE cr.EmpresaId = @empresaId AND cr.Id = @id
-            """;
-        var cabecera = await connection.QuerySingleOrDefaultAsync<CabeceraCredito>(sql, new { empresaId, id });
+        var cabecera = await multi.ReadSingleOrDefaultAsync<CabeceraCredito>();
+        var abonos = (await multi.ReadAsync<AbonoCreditoDto>()).AsList();
         if (cabecera is null) return null;
-
-        const string abonosSql = """
-            SELECT a.Id, a.Fecha, a.Metodo, a.Monto, a.Referencia, u.NombreCompleto AS UsuarioNombre
-            FROM AbonoCredito a
-            INNER JOIN Usuario u ON u.Id = a.UsuarioId
-            WHERE a.CreditoId = @id
-            ORDER BY a.Fecha DESC, a.Id DESC
-            """;
-        var abonos = (await connection.QueryAsync<AbonoCreditoDto>(abonosSql, new { id })).AsList();
 
         return new CreditoDto(cabecera.Id, cabecera.VentaId, cabecera.VentaFolio, cabecera.ClienteId, cabecera.ClienteNombre,
             cabecera.FechaCreacion, cabecera.FechaVencimiento, cabecera.FechaCancelacion,

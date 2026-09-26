@@ -5,6 +5,7 @@
   <p-button label="Nueva categoría" icon="pi pi-plus" (onClick)="nueva()" />
 </div>
 
+<div class="mm-table-wrap">
 <p-table [value]="categorias()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
   <ng-template #header>
     <tr>
@@ -30,6 +31,7 @@
     </tr>
   </ng-template>
 </p-table>
+</div>
 
 <p-dialog [header]="editandoId ? 'Editar categoría' : 'Nueva categoría'" [(visible)]="mostrarFormulario" [modal]="true" [style]="{ width: '24rem' }">
   <div class="flex flex-col gap-3">

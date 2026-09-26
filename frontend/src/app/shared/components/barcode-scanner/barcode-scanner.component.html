@@ -1,0 +1,6 @@
+<p-dialog header="Escanear código de barras" [visible]="visible()" [modal]="true" [style]="{ width: '28rem' }" (onHide)="cerrar()">
+  <video #video class="w-full rounded-lg bg-black" autoplay muted playsinline></video>
+  @if (error()) {
+    <p class="text-sm text-red-500 mt-2">{{ error() }}</p>
+  }
+</p-dialog>

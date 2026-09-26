@@ -19,55 +19,41 @@ public class CajaRepository : ICajaRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Caja>(
-            "SELECT * FROM Caja WHERE EmpresaId = @empresaId AND UsuarioAperturaId = @usuarioId AND Estado = 'ABIERTA'",
-            new { empresaId, usuarioId });
+            "market.usp_Caja_ObtenerAbiertaPorUsuario", new { empresaId, usuarioId }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<Caja?> ObtenerPorIdAsync(int empresaId, int id)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Caja>(
-            "SELECT * FROM Caja WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+            "market.usp_Caja_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<IReadOnlyList<CajaDto>> ListarAsync(int empresaId, int? sucursalId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            SELECT c.Id, c.SucursalId, c.UsuarioAperturaId, ua.NombreCompleto AS UsuarioAperturaNombre,
-                   c.FechaApertura, c.MontoInicial, c.UsuarioCierreId, uc.NombreCompleto AS UsuarioCierreNombre,
-                   c.FechaCierre, c.MontoFinalDeclarado, c.MontoFinalSistema, c.Diferencia, c.Estado
-            FROM Caja c
-            INNER JOIN Usuario ua ON ua.Id = c.UsuarioAperturaId
-            LEFT JOIN Usuario uc ON uc.Id = c.UsuarioCierreId
-            WHERE c.EmpresaId = @empresaId AND (@sucursalId IS NULL OR c.SucursalId = @sucursalId)
-            ORDER BY c.FechaApertura DESC
-            """;
-        var items = await connection.QueryAsync<CajaDto>(sql, new { empresaId, sucursalId });
+        var items = await connection.QueryAsync<CajaDto>(
+            "market.usp_Caja_Listar", new { empresaId, sucursalId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
     public async Task<int> AbrirAsync(Caja caja)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            INSERT INTO Caja (EmpresaId, SucursalId, UsuarioAperturaId, FechaApertura, MontoInicial, Estado)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @SucursalId, @UsuarioAperturaId, @FechaApertura, @MontoInicial, @Estado)
-            """;
-        return await connection.QuerySingleAsync<int>(sql, caja);
+        return await connection.QuerySingleAsync<int>("market.usp_Caja_Abrir", new
+        {
+            caja.EmpresaId, caja.SucursalId, caja.UsuarioAperturaId, caja.FechaApertura, caja.MontoInicial, caja.Estado
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task CerrarAsync(Caja caja)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE Caja SET UsuarioCierreId = @UsuarioCierreId, FechaCierre = @FechaCierre,
-                MontoFinalDeclarado = @MontoFinalDeclarado, MontoFinalSistema = @MontoFinalSistema,
-                Diferencia = @Diferencia, Estado = @Estado
-            WHERE Id = @Id
-            """;
-        await connection.ExecuteAsync(sql, caja);
+        await connection.ExecuteAsync("market.usp_Caja_Cerrar", new
+        {
+            caja.Id, caja.UsuarioCierreId, caja.FechaCierre, caja.MontoFinalDeclarado,
+            caja.MontoFinalSistema, caja.Diferencia, caja.Estado
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> RegistrarMovimientoAsync(MovimientoCaja movimiento, IDbTransaction? transaction = null)
@@ -75,12 +61,11 @@ public class CajaRepository : ICajaRepository
         var connection = transaction?.Connection ?? _connectionFactory.CreateOpenConnection();
         try
         {
-            const string sql = """
-                INSERT INTO MovimientoCaja (CajaId, Tipo, Concepto, Monto, UsuarioId, Fecha, DocumentoReferenciaTipo, DocumentoReferenciaId)
-                OUTPUT INSERTED.Id
-                VALUES (@CajaId, @Tipo, @Concepto, @Monto, @UsuarioId, @Fecha, @DocumentoReferenciaTipo, @DocumentoReferenciaId)
-                """;
-            return await connection.QuerySingleAsync<int>(sql, movimiento, transaction);
+            return await connection.QuerySingleAsync<int>("market.usp_MovimientoCaja_Registrar", new
+            {
+                movimiento.CajaId, movimiento.Tipo, movimiento.Concepto, movimiento.Monto, movimiento.UsuarioId,
+                movimiento.Fecha, movimiento.DocumentoReferenciaTipo, movimiento.DocumentoReferenciaId
+            }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {
@@ -92,7 +77,7 @@ public class CajaRepository : ICajaRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         var items = await connection.QueryAsync<MovimientoCaja>(
-            "SELECT * FROM MovimientoCaja WHERE CajaId = @cajaId ORDER BY Fecha", new { cajaId });
+            "market.usp_MovimientoCaja_Listar", new { cajaId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -101,13 +86,8 @@ public class CajaRepository : ICajaRepository
         var connection = transaction?.Connection ?? _connectionFactory.CreateOpenConnection();
         try
         {
-            const string sql = """
-                SELECT
-                    ISNULL(SUM(CASE WHEN Tipo = 'INGRESO' THEN Monto ELSE 0 END), 0) AS Ingresos,
-                    ISNULL(SUM(CASE WHEN Tipo = 'EGRESO' THEN Monto ELSE 0 END), 0) AS Egresos
-                FROM MovimientoCaja WHERE CajaId = @cajaId
-                """;
-            return await connection.QuerySingleAsync<(decimal Ingresos, decimal Egresos)>(sql, new { cajaId }, transaction);
+            return await connection.QuerySingleAsync<(decimal Ingresos, decimal Egresos)>(
+                "market.usp_MovimientoCaja_ObtenerTotales", new { cajaId }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {

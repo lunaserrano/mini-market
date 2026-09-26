@@ -21,18 +21,12 @@ public class ProductoRepository : IProductoRepository
     public async Task<IReadOnlyList<ProductoDto>> ListarAsync(int empresaId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
+        using var multi = await connection.QueryMultipleAsync(
+            "market.usp_Producto_Listar", new { empresaId }, commandType: CommandType.StoredProcedure);
 
-        var productos = (await connection.QueryAsync<Producto>(
-            "SELECT * FROM Producto WHERE EmpresaId = @empresaId ORDER BY Nombre", new { empresaId })).ToList();
-        if (productos.Count == 0) return Array.Empty<ProductoDto>();
-
-        var categorias = (await connection.QueryAsync<(int Id, string Nombre)>(
-            "SELECT Id, Nombre FROM Categoria WHERE Id IN @ids",
-            new { ids = productos.Select(p => p.CategoriaId).Distinct() })).ToDictionary(c => c.Id, c => c.Nombre);
-
-        var tiposPrecio = (await connection.QueryAsync<TipoPrecio>(
-            "SELECT * FROM TipoPrecio WHERE ProductoId IN @ids ORDER BY Nombre",
-            new { ids = productos.Select(p => p.Id) })).ToLookup(t => t.ProductoId);
+        var productos = (await multi.ReadAsync<Producto>()).ToList();
+        var categorias = (await multi.ReadAsync<(int Id, string Nombre)>()).ToDictionary(c => c.Id, c => c.Nombre);
+        var tiposPrecio = (await multi.ReadAsync<TipoPrecio>()).ToLookup(t => t.ProductoId);
 
         return productos.Select(p => new ProductoDto(
             p.Id, p.CategoriaId, categorias.GetValueOrDefault(p.CategoriaId), p.ProveedorId, p.Nombre, p.Descripcion,
@@ -44,19 +38,15 @@ public class ProductoRepository : IProductoRepository
     public async Task<ProductoDto?> ObtenerPorIdAsync(int empresaId, int id)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
+        using var multi = await connection.QueryMultipleAsync(
+            "market.usp_Producto_ObtenerPorId", new { empresaId, id }, commandType: CommandType.StoredProcedure);
 
-        var producto = await connection.QuerySingleOrDefaultAsync<Producto>(
-            "SELECT * FROM Producto WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+        var producto = await multi.ReadSingleOrDefaultAsync<ProductoConCategoria>();
+        var tiposPrecio = await multi.ReadAsync<TipoPrecio>();
         if (producto is null) return null;
 
-        var categoriaNombre = await connection.QuerySingleOrDefaultAsync<string>(
-            "SELECT Nombre FROM Categoria WHERE Id = @categoriaId", new { producto.CategoriaId });
-
-        var tiposPrecio = await connection.QueryAsync<TipoPrecio>(
-            "SELECT * FROM TipoPrecio WHERE ProductoId = @id ORDER BY Nombre", new { id });
-
         return new ProductoDto(
-            producto.Id, producto.CategoriaId, categoriaNombre, producto.ProveedorId, producto.Nombre, producto.Descripcion,
+            producto.Id, producto.CategoriaId, producto.CategoriaNombre, producto.ProveedorId, producto.Nombre, producto.Descripcion,
             producto.CodigoBarras, producto.CodigoInterno, producto.ImagenPath, producto.UnidadBase, producto.Estado,
             tiposPrecio.Select(MapTipoPrecio).ToList());
     }
@@ -65,30 +55,17 @@ public class ProductoRepository : IProductoRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<Producto>(
-            "SELECT * FROM Producto WHERE EmpresaId = @empresaId AND Id = @id", new { empresaId, id });
+            "market.usp_Producto_ObtenerEntidad", new { empresaId, id }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<IReadOnlyList<ProductoPosDto>> BuscarParaPosAsync(int empresaId, int sucursalId, string termino)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
+        using var multi = await connection.QueryMultipleAsync(
+            "market.usp_Producto_BuscarParaPos", new { empresaId, sucursalId, termino }, commandType: CommandType.StoredProcedure);
 
-        const string sql = """
-            SELECT TOP 20 p.Id, p.Nombre, p.CodigoBarras, p.UnidadBase,
-                   ISNULL(i.StockActual, 0) AS StockActual
-            FROM Producto p
-            LEFT JOIN Inventario i ON i.ProductoId = p.Id AND i.SucursalId = @sucursalId
-            WHERE p.EmpresaId = @empresaId AND p.Estado = 'A'
-              AND (p.CodigoBarras = @termino OR p.Nombre LIKE '%' + @termino + '%')
-            ORDER BY p.Nombre
-            """;
-
-        var filas = (await connection.QueryAsync<(int Id, string Nombre, string? CodigoBarras, string UnidadBase, decimal StockActual)>(
-            sql, new { empresaId, sucursalId, termino })).ToList();
-        if (filas.Count == 0) return Array.Empty<ProductoPosDto>();
-
-        var tiposPrecio = (await connection.QueryAsync<TipoPrecio>(
-            "SELECT * FROM TipoPrecio WHERE ProductoId IN @ids AND Estado = 'A' ORDER BY Nombre",
-            new { ids = filas.Select(f => f.Id) })).ToLookup(t => t.ProductoId);
+        var filas = (await multi.ReadAsync<(int Id, string Nombre, string? CodigoBarras, string UnidadBase, decimal StockActual)>()).ToList();
+        var tiposPrecio = (await multi.ReadAsync<TipoPrecio>()).ToLookup(t => t.ProductoId);
 
         return filas.Select(f => new ProductoPosDto(
             f.Id, f.Nombre, f.CodigoBarras, f.UnidadBase, f.StockActual,
@@ -99,40 +76,37 @@ public class ProductoRepository : IProductoRepository
     public async Task<int> CrearAsync(Producto producto)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            INSERT INTO Producto (EmpresaId, CategoriaId, ProveedorId, Nombre, Descripcion, CodigoBarras, CodigoInterno,
-                ImagenPath, UnidadBase, Estado, CreadoPorUsuarioId, FechaCreacion)
-            OUTPUT INSERTED.Id
-            VALUES (@EmpresaId, @CategoriaId, @ProveedorId, @Nombre, @Descripcion, @CodigoBarras, @CodigoInterno,
-                @ImagenPath, @UnidadBase, @Estado, @CreadoPorUsuarioId, @FechaCreacion)
-            """;
-        return await connection.QuerySingleAsync<int>(sql, producto);
+        return await connection.QuerySingleAsync<int>("market.usp_Producto_Crear", new
+        {
+            producto.EmpresaId, producto.CategoriaId, producto.ProveedorId, producto.Nombre, producto.Descripcion,
+            producto.CodigoBarras, producto.CodigoInterno, producto.ImagenPath, producto.UnidadBase, producto.Estado,
+            producto.CreadoPorUsuarioId, producto.FechaCreacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ActualizarAsync(Producto producto)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE Producto SET CategoriaId = @CategoriaId, ProveedorId = @ProveedorId, Nombre = @Nombre,
-                Descripcion = @Descripcion, CodigoBarras = @CodigoBarras, CodigoInterno = @CodigoInterno,
-                ImagenPath = @ImagenPath, UnidadBase = @UnidadBase,
-                ModificadoPorUsuarioId = @ModificadoPorUsuarioId, FechaModificacion = @FechaModificacion
-            WHERE Id = @Id AND EmpresaId = @EmpresaId
-            """;
-        await connection.ExecuteAsync(sql, producto);
+        await connection.ExecuteAsync("market.usp_Producto_Actualizar", new
+        {
+            producto.Id, producto.EmpresaId, producto.CategoriaId, producto.ProveedorId, producto.Nombre,
+            producto.Descripcion, producto.CodigoBarras, producto.CodigoInterno, producto.ImagenPath, producto.UnidadBase,
+            producto.ModificadoPorUsuarioId, producto.FechaModificacion
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task CambiarEstadoAsync(int empresaId, int id, string estado)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync("UPDATE Producto SET Estado = @estado WHERE Id = @id AND EmpresaId = @empresaId", new { empresaId, id, estado });
+        await connection.ExecuteAsync(
+            "market.usp_Producto_CambiarEstado", new { empresaId, id, estado }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<IReadOnlyList<TipoPrecio>> ListarTiposPrecioAsync(int productoId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         var items = await connection.QueryAsync<TipoPrecio>(
-            "SELECT * FROM TipoPrecio WHERE ProductoId = @productoId ORDER BY Nombre", new { productoId });
+            "market.usp_TipoPrecio_Listar", new { productoId }, commandType: CommandType.StoredProcedure);
         return items.AsList();
     }
 
@@ -140,7 +114,7 @@ public class ProductoRepository : IProductoRepository
     {
         using var connection = _connectionFactory.CreateOpenConnection();
         return await connection.QuerySingleOrDefaultAsync<TipoPrecio>(
-            "SELECT * FROM TipoPrecio WHERE ProductoId = @productoId AND Id = @tipoPrecioId", new { productoId, tipoPrecioId });
+            "market.usp_TipoPrecio_ObtenerPorId", new { productoId, tipoPrecioId }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> CrearTipoPrecioAsync(TipoPrecio tipoPrecio, IDbTransaction? transaction = null)
@@ -148,12 +122,11 @@ public class ProductoRepository : IProductoRepository
         var connection = transaction?.Connection ?? _connectionFactory.CreateOpenConnection();
         try
         {
-            const string sql = """
-                INSERT INTO TipoPrecio (ProductoId, Nombre, CantidadBase, PrecioVenta, PrecioCompra, EsDefault, Estado)
-                OUTPUT INSERTED.Id
-                VALUES (@ProductoId, @Nombre, @CantidadBase, @PrecioVenta, @PrecioCompra, @EsDefault, @Estado)
-                """;
-            return await connection.QuerySingleAsync<int>(sql, tipoPrecio, transaction);
+            return await connection.QuerySingleAsync<int>("market.usp_TipoPrecio_Crear", new
+            {
+                tipoPrecio.ProductoId, tipoPrecio.Nombre, tipoPrecio.CantidadBase, tipoPrecio.PrecioVenta,
+                tipoPrecio.PrecioCompra, tipoPrecio.EsDefault, tipoPrecio.Estado
+            }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {
@@ -164,18 +137,18 @@ public class ProductoRepository : IProductoRepository
     public async Task ActualizarTipoPrecioAsync(TipoPrecio tipoPrecio)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        const string sql = """
-            UPDATE TipoPrecio SET Nombre = @Nombre, CantidadBase = @CantidadBase, PrecioVenta = @PrecioVenta,
-                PrecioCompra = @PrecioCompra, EsDefault = @EsDefault
-            WHERE Id = @Id AND ProductoId = @ProductoId
-            """;
-        await connection.ExecuteAsync(sql, tipoPrecio);
+        await connection.ExecuteAsync("market.usp_TipoPrecio_Actualizar", new
+        {
+            tipoPrecio.Id, tipoPrecio.ProductoId, tipoPrecio.Nombre, tipoPrecio.CantidadBase,
+            tipoPrecio.PrecioVenta, tipoPrecio.PrecioCompra, tipoPrecio.EsDefault
+        }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task EliminarTipoPrecioAsync(int productoId, int tipoPrecioId)
     {
         using var connection = _connectionFactory.CreateOpenConnection();
-        await connection.ExecuteAsync("DELETE FROM TipoPrecio WHERE Id = @tipoPrecioId AND ProductoId = @productoId", new { productoId, tipoPrecioId });
+        await connection.ExecuteAsync(
+            "market.usp_TipoPrecio_Eliminar", new { productoId, tipoPrecioId }, commandType: CommandType.StoredProcedure);
     }
 
     public async Task LimpiarDefaultAsync(int productoId, IDbTransaction? transaction = null)
@@ -184,8 +157,7 @@ public class ProductoRepository : IProductoRepository
         try
         {
             await connection.ExecuteAsync(
-                "UPDATE TipoPrecio SET EsDefault = 0 WHERE ProductoId = @productoId AND EsDefault = 1",
-                new { productoId }, transaction);
+                "market.usp_TipoPrecio_LimpiarDefault", new { productoId }, transaction, commandType: CommandType.StoredProcedure);
         }
         finally
         {
@@ -196,7 +168,12 @@ public class ProductoRepository : IProductoRepository
     public async Task ActualizarPrecioCompraAsync(int tipoPrecioId, decimal precioCompra, IDbTransaction transaction)
     {
         await transaction.Connection!.ExecuteAsync(
-            "UPDATE TipoPrecio SET PrecioCompra = @precioCompra WHERE Id = @tipoPrecioId",
-            new { tipoPrecioId, precioCompra }, transaction);
+            "market.usp_TipoPrecio_ActualizarPrecioCompra", new { tipoPrecioId, precioCompra }, transaction,
+            commandType: CommandType.StoredProcedure);
     }
+
+    private sealed record ProductoConCategoria(
+        int Id, int EmpresaId, int CategoriaId, int? ProveedorId, string Nombre, string? Descripcion,
+        string? CodigoBarras, string? CodigoInterno, string? ImagenPath, string UnidadBase, string Estado,
+        string? CategoriaNombre);
 }

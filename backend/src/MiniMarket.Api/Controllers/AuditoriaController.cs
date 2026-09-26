@@ -26,10 +26,23 @@ public class AuditoriaController : ControllerBase
     [HttpPost("cliente")]
     [Authorize]
     [RequestSizeLimit(256 * 1024)]
-    public IActionResult RegistrarCliente([FromBody] List<EventoClienteDto> eventos)
+    public async Task<IActionResult> RegistrarCliente([FromBody] List<EventoClienteDto> eventos)
     {
-        _service.RegistrarEventosCliente(eventos);
+        await _service.RegistrarEventosCliente(eventos);
         return Accepted();
+    }
+
+    /// <summary>Bandera para activar/desactivar el registro de auditoría de la empresa actual (market.Parametro).</summary>
+    [HttpGet("estado")]
+    [HasPermission(Permisos.EmpresaEditar)]
+    public async Task<ActionResult<AuditoriaEstadoDto>> ObtenerEstado() => Ok(await _service.ObtenerEstadoAsync());
+
+    [HttpPut("estado")]
+    [HasPermission(Permisos.EmpresaEditar)]
+    public async Task<IActionResult> ActualizarEstado([FromBody] AuditoriaEstadoDto dto)
+    {
+        await _service.ActualizarEstadoAsync(dto);
+        return NoContent();
     }
 
     /// <summary>Tipos de evento disponibles para el filtro de la UI.</summary>
