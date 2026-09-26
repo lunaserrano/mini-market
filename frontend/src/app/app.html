@@ -1,1 +1,8 @@
+@if (loadingService.cargando()) {
+  <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-surface-900/20 backdrop-blur-[1px]">
+    <div class="rounded-xl bg-surface-0 dark:bg-surface-900 shadow-lg px-6 py-5">
+      <app-spinner size="lg" label="Cargando..." />
+    </div>
+  </div>
+}
 <router-outlet />

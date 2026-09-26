@@ -3,6 +3,8 @@ import { animate, style, transition, trigger } from '@angular/animations';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { ButtonModule } from 'primeng/button';
+import { ConfirmationService } from 'primeng/api';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ToastModule } from 'primeng/toast';
 import { AuthService } from '../core/services/auth.service';
 import { ConfigService } from '../core/services/config.service';
@@ -14,7 +16,8 @@ const ANCHO_ESCRITORIO = 1024;
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, ToastModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, ToastModule, ConfirmDialogModule],
+  providers: [ConfirmationService],
   animations: [
     // Reinicia la animación en cada navegación porque rutaActual() cambia de valor (URL completa).
     trigger('fadeRuta', [
@@ -26,6 +29,7 @@ const ANCHO_ESCRITORIO = 1024;
   ],
   template: `
     <p-toast />
+    <p-confirmdialog />
 
     <!-- Fondo oscuro detrás del menú lateral cuando está abierto como cajón (móvil/tablet) -->
     @if (sidebarAbierto()) {
@@ -82,7 +86,7 @@ const ANCHO_ESCRITORIO = 1024;
             <a routerLink="/auth/cambiar-password" title="Cambiar contraseña">
               <p-button icon="pi pi-key" [text]="true" [rounded]="true" severity="secondary" />
             </a>
-            <p-button icon="pi pi-sign-out" title="Cerrar sesión" [text]="true" [rounded]="true" severity="secondary" (onClick)="authService.logout()" />
+            <p-button icon="pi pi-sign-out" title="Cerrar sesión" [text]="true" [rounded]="true" severity="secondary" (onClick)="confirmarCerrarSesion()" />
           </div>
         </header>
         <main class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6" [@fadeRuta]="rutaActual()">
@@ -109,6 +113,7 @@ export class AppLayoutComponent implements OnInit {
   constructor(
     readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly confirmationService: ConfirmationService,
     private readonly router: Router
   ) {
     this.router.events.pipe(filter((evento) => evento instanceof NavigationEnd)).subscribe((evento) => {
@@ -131,6 +136,17 @@ export class AppLayoutComponent implements OnInit {
     if (!this.esEscritorio()) {
       this.sidebarAbierto.set(false);
     }
+  }
+
+  confirmarCerrarSesion(): void {
+    this.confirmationService.confirm({
+      message: '¿Cerrar la sesión actual?',
+      header: 'Confirmar',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Cerrar sesión',
+      rejectLabel: 'Cancelar',
+      accept: () => this.authService.logout()
+    });
   }
 
   private esEscritorio(): boolean {
