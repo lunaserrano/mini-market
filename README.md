@@ -8,6 +8,9 @@ empresa). Ver [`docs/architecture.md`](docs/architecture.md) para el diseño com
 - **Frontend**: `frontend/` — Angular 22 + PrimeNG + Tailwind CSS.
 - **Base de datos**: `database/` — scripts SQL versionados, aplicados por DbUp al iniciar la Api.
 
+> **Versión de escritorio offline (WinForms + Api local + SQL Server Express):** ver
+> [docs/desktop-instalacion.md](docs/desktop-instalacion.md).
+
 ## Requisitos
 
 - .NET SDK 9.0.x (fijado en `backend/global.json`)

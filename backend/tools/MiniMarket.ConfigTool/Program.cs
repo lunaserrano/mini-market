@@ -14,6 +14,8 @@ using MiniMarket.Infrastructure.Security;
 //   MiniMarket.ConfigTool encrypt "<valor>"                    (cifra un valor suelto -> ENC:...)
 //   MiniMarket.ConfigTool verify --dir ...                     (comprueba que los secretos descifran y conectan)
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 return args.FirstOrDefault()?.ToLowerInvariant() switch
 {
     "init" => Init(Opciones(args)),
@@ -46,7 +48,11 @@ static int Init(Dictionary<string, string?> o)
     else
     {
         csb.UserID = o.GetValueOrDefault("user") ?? "minimarket_api";
-        csb.Password = o.GetValueOrDefault("password") ?? LeerPassword($"Contraseña SQL de '{csb.UserID}': ");
+        // Orden: --password, variable MINIMARKET_SQL_PASSWORD (la usa install-api-service.ps1 para no
+        // exponer la clave en la lista de procesos) o se pide por consola.
+        csb.Password = o.GetValueOrDefault("password")
+            ?? Environment.GetEnvironmentVariable("MINIMARKET_SQL_PASSWORD")
+            ?? LeerPassword($"Contraseña SQL de '{csb.UserID}': ");
     }
 
     Console.WriteLine($"Probando conexión a {server} / {database}...");

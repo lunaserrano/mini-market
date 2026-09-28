@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ofuscación de la Api para la instalación Desktop (Obfuscar). Se ejecuta al publicar con
+  -p:Obfuscate=true (ver build/Obfuscar.targets); rutas relativas a la carpeta de publicación.
+
+  Se ofuscan las capas con la lógica de negocio (Application) y el acceso a datos (Infrastructure).
+  KeepPublicApi=true: DI, controllers, model binding, FluentValidation y Dapper trabajan con tipos y
+  propiedades PÚBLICAS por reflexión; se renombra lo privado/interno y se cifran los strings
+  (nombres de procedures, mensajes, entropía de DPAPI).
+  Persistence se excluye: Dapper materializa tipos privados (ProductoConCategoria, records de
+  cabecera) por nombre de propiedad/parámetro. Domain queda legible (solo entidades y constantes).
+-->
+<Obfuscator>
+  <Var name="InPath" value="." />
+  <Var name="OutPath" value=".\obfuscated" />
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="HideStrings" value="true" />
+  <Var name="RenameProperties" value="true" />
+  <Var name="RenameFields" value="true" />
+  <Var name="UseUnicodeNames" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+
+  <Module file="$(InPath)\MiniMarket.Application.dll">
+    <!-- Tipos anónimos (new { empresaId, id }): el compilador los genera FUERA de su namespace, así que
+         SkipNamespace no los cubre. Dapper/System.Text.Json leen sus propiedades por nombre. -->
+    <SkipType rx="^&lt;&gt;f__AnonymousType.*" skipMethods="true" skipProperties="true" skipFields="true" skipEvents="true" />
+  </Module>
+  <Module file="$(InPath)\MiniMarket.Infrastructure.dll">
+    <SkipNamespace name="MiniMarket.Infrastructure.Persistence" />
+    <SkipNamespace name="MiniMarket.Infrastructure.Persistence.Repositories" />
+    <!-- Tipos anónimos (new { empresaId, id }): el compilador los genera FUERA de su namespace, así que
+         SkipNamespace no los cubre. Dapper/System.Text.Json leen sus propiedades por nombre. -->
+    <SkipType rx="^&lt;&gt;f__AnonymousType.*" skipMethods="true" skipProperties="true" skipFields="true" skipEvents="true" />
+  </Module>
+</Obfuscator>

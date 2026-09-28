@@ -1,0 +1,37 @@
+<Project>
+  <!--
+    Ofuscación post-publish con Obfuscar (herramienta local: .config/dotnet-tools.json).
+    Uso:  dotnet publish -c Release -r win-x64 - -self-contained -p:Obfuscate=true
+    Requiere un obfuscar.xml en la carpeta del proyecto. Las dll ofuscadas reemplazan a las originales
+    en la carpeta de publicación; el mapa de nombres (para descifrar stack traces) queda en obj/.
+    No usar con PublishSingleFile: Obfuscar trabaja sobre las dll sueltas.
+  -->
+  <Target Name="MiniMarketObfuscar" AfterTargets="Publish" Condition="'$(Obfuscate)' == 'true'">
+    <PropertyGroup>
+      <_MmPublishDir>$([System.IO.Path]::GetFullPath('$(PublishDir)'))</_MmPublishDir>
+      <_MmObfDir>$(_MmPublishDir)obfuscated\</_MmObfDir>
+      <_MmMapDir>$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)'))obfuscar\</_MmMapDir>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\obfuscar.xml')" Text="Falta obfuscar.xml en $(MSBuildProjectDirectory)." />
+    <Message Importance="high" Text="Ofuscando $(MSBuildProjectName) en $(_MmPublishDir) ..." />
+
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+    <Exec Command="dotnet tool run obfuscar.console &quot;$(MSBuildProjectDirectory)\obfuscar.xml&quot;"
+          WorkingDirectory="$(_MmPublishDir)" />
+
+    <ItemGroup>
+      <_MmObfuscadas Include="$(_MmObfDir)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_MmObfuscadas)" DestinationFolder="$(_MmPublishDir)" />
+    <!-- Fecha antigua a propósito: el próximo publish al mismo directorio copia "solo si es más nuevo";
+         sin esto conservaría la dll YA ofuscada y Obfuscar fallaría al procesarla por segunda vez. -->
+    <ItemGroup>
+      <_MmCopiadas Include="@(_MmObfuscadas->'$(_MmPublishDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+    <Touch Files="@(_MmCopiadas)" Time="2000-01-01T00:00:00" />
+    <Copy SourceFiles="$(_MmObfDir)Mapping.txt" DestinationFolder="$(_MmMapDir)" Condition="Exists('$(_MmObfDir)Mapping.txt')" />
+    <RemoveDir Directories="$(_MmObfDir)" />
+    <Message Importance="high" Text="Ofuscación completa: @(_MmObfuscadas->'%(Filename)%(Extension)', ', '). Mapa: $(_MmMapDir)Mapping.txt" />
+  </Target>
+</Project>

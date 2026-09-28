@@ -12,7 +12,6 @@ namespace MiniMarket.Infrastructure.Security;
 /// Lo usan la Api (EncryptedConfigurationExtensions, al arrancar) y MiniMarket.ConfigTool (al instalar),
 /// que enlaza este mismo archivo fuente para no depender de toda la capa Infrastructure.
 /// </summary>
-[SupportedOSPlatform("windows")]
 public static class DpapiProtector
 {
     public const string Prefijo = "ENC:";
@@ -25,12 +24,14 @@ public static class DpapiProtector
     public static bool EstaCifrado(string? valor) =>
         valor is not null && valor.StartsWith(Prefijo, StringComparison.Ordinal);
 
+    [SupportedOSPlatform("windows")]
     public static string Cifrar(string textoPlano)
     {
         var bytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(textoPlano), Entropia, DataProtectionScope.LocalMachine);
         return Prefijo + Convert.ToBase64String(bytes);
     }
 
+    [SupportedOSPlatform("windows")]
     public static string Descifrar(string valorCifrado)
     {
         if (!EstaCifrado(valorCifrado)) return valorCifrado;

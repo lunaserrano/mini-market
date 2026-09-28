@@ -122,3 +122,30 @@ Swagger disponible en `/swagger` en Development, con soporte de Bearer token.
   `TrasladoEntrada`/`TrasladoSalida`, pero no hay endpoint todavía.
 - **Testing automatizado**: no incluido en este alcance; se recomienda al menos una prueba de
   integración del flujo de venta end-to-end antes de producción.
+
+## 9. Modo Desktop / offline (rama `market-desktop`)
+
+Versión de escritorio que funciona 100 % local, sin internet:
+
+```
+MiniMarket.Desktop (WinForms) ──HTTP/JWT──► MiniMarket.Api (Windows Service, entorno "Desktop")
+                                                   │
+                                                   ├──► SQL Server Express local (misma base y migraciones)
+                                                   └──► (futuro) Api central en Azure vía SyncBackgroundService
+```
+
+- **Desacople**: el cliente WinForms (`desktop/MiniMarket.Desktop`) no referencia ningún proyecto del
+  backend ni `SqlClient`. Replica los DTOs como records propios y consume la misma Api que la web, con
+  refresh automático del JWT (`AuthDelegatingHandler`). La lógica de negocio sigue siendo solo del backend.
+- **Api local**: la misma `MiniMarket.Api`, con `UseWindowsService()` y `appsettings.Desktop.json`:
+  Kestrel en `127.0.0.1:5080`, sin redirección HTTPS, seed habilitado y `GET /api/health`.
+- **Secretos**: `appsettings.Secrets.json` (fuera del repo) con valores `ENC:` cifrados por DPAPI de
+  máquina (`DpapiProtector`), generados por `backend/tools/MiniMarket.ConfigTool` y descifrados en
+  memoria (`AddDecryptedValues`). El cliente guarda el refresh token con DPAPI de usuario.
+- **Ofuscación**: Obfuscar al publicar (`-p:Obfuscate=true`, `build/Obfuscar.targets`). Se ofuscan
+  Application, Infrastructure (excepto Persistence y los tipos anónimos, que Dapper lee por nombre) y
+  el cliente WinForms (excepto los modelos JSON y los tipos enlazados a grillas).
+- **Sincronización futura**: migración `0019_sync_preparacion.sql` (`SyncId`, `SyncVersion`,
+  `NodoSync`, `SyncOutbox`) más `ISyncService` (hoy `NoOpSyncService`).
+
+Instalación y operación: [docs/desktop-instalacion.md](desktop-instalacion.md).
