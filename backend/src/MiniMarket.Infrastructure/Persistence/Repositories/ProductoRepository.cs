@@ -172,8 +172,22 @@ public class ProductoRepository : IProductoRepository
             commandType: CommandType.StoredProcedure);
     }
 
-    private sealed record ProductoConCategoria(
-        int Id, int EmpresaId, int CategoriaId, int? ProveedorId, string Nombre, string? Descripcion,
-        string? CodigoBarras, string? CodigoInterno, string? ImagenPath, string UnidadBase, string Estado,
-        string? CategoriaNombre);
+    // Clase con propiedades (no record posicional): usp_Producto_ObtenerPorId devuelve "p.*", y Dapper
+    // exige que un constructor posicional coincida con TODAS las columnas. Con propiedades, las columnas
+    // sin propiedad (p. ej. SyncId/SyncVersion de 0019_sync_preparacion.sql) simplemente se ignoran.
+    private sealed class ProductoConCategoria
+    {
+        public int Id { get; init; }
+        public int EmpresaId { get; init; }
+        public int CategoriaId { get; init; }
+        public int? ProveedorId { get; init; }
+        public string Nombre { get; init; } = "";
+        public string? Descripcion { get; init; }
+        public string? CodigoBarras { get; init; }
+        public string? CodigoInterno { get; init; }
+        public string? ImagenPath { get; init; }
+        public string UnidadBase { get; init; } = "";
+        public string Estado { get; init; } = "";
+        public string? CategoriaNombre { get; init; }
+    }
 }
