@@ -6,6 +6,7 @@ using MiniMarket.Application.Services;
 using MiniMarket.Infrastructure.Persistence;
 using MiniMarket.Infrastructure.Persistence.Repositories;
 using MiniMarket.Infrastructure.Services;
+using MiniMarket.Infrastructure.Sync;
 
 namespace MiniMarket.Infrastructure;
 
@@ -26,6 +27,8 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(configuration.GetSection(SeguridadOptions.SectionName).Get<SeguridadOptions>() ?? new SeguridadOptions());
         services.AddSingleton(configuration.GetSection(AuditoriaOptions.SectionName).Get<AuditoriaOptions>() ?? new AuditoriaOptions());
+        services.AddSingleton(configuration.GetSection(SyncOptions.SectionName).Get<SyncOptions>() ?? new SyncOptions());
+        services.AddScoped<ISyncService, NoOpSyncService>();
         services.AddMemoryCache();
         services.AddScoped<IAuditoriaEstadoProvider, AuditoriaEstadoProvider>();
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));

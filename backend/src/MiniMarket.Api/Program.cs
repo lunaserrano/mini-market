@@ -5,8 +5,10 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.IdentityModel.Tokens;
 using MiniMarket.Api.Authorization;
+using MiniMarket.Api.Configuration;
 using MiniMarket.Api.Controllers;
 using MiniMarket.Api.Filters;
 using MiniMarket.Api.Middleware;
@@ -17,7 +19,21 @@ using MiniMarket.Infrastructure;
 using MiniMarket.Infrastructure.Persistence;
 using MiniMarket.Infrastructure.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+// Como Windows Service (instalación desktop/offline) el directorio de trabajo es System32: el content root
+// debe ser la carpeta del ejecutable para encontrar appsettings*.json.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null
+});
+builder.Host.UseWindowsService(options => options.ServiceName = "MiniMarketApi");
+
+// Modo Desktop = API como servicio en la misma PC/LAN que el cliente WinForms, contra SQL Server Express
+// (sin internet). Sus secretos viven en appsettings.Secrets.json (generado por MiniMarket.ConfigTool,
+// fuera del repo) cifrados con DPAPI ("ENC:") y se descifran solo en memoria.
+var esDesktop = builder.Environment.IsEnvironment("Desktop");
+builder.Configuration.AddJsonFile("appsettings.Secrets.json", optional: true, reloadOnChange: false);
+builder.Configuration.AddDecryptedValues();
 
 // --- Servicios ---
 builder.Services.AddHttpContextAccessor();
@@ -52,9 +68,16 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AuditoriaWriterService>();
+builder.Services.AddHostedService<SyncBackgroundService>();
 
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
     ?? throw new InvalidOperationException("Falta la sección 'Jwt' en la configuración.");
+if (string.IsNullOrWhiteSpace(jwtSettings.Key) || jwtSettings.Key.Length < 32)
+    throw new InvalidOperationException(
+        "Falta Jwt:Key (mínimo 32 caracteres). En modo Desktop ejecute 'MiniMarket.ConfigTool init' para generarla.");
+if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")))
+    throw new InvalidOperationException(
+        "Falta ConnectionStrings:DefaultConnection. En modo Desktop ejecute 'MiniMarket.ConfigTool init' para generarla.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -116,7 +139,8 @@ DatabaseMigrator.ApplyMigrations(connectionString);
 
 await PermisoCatalogSync.SyncAsync(app.Services.GetRequiredService<IDbConnectionFactory>());
 
-if (app.Environment.IsDevelopment())
+// En Desktop el seed crea la empresa, sucursal, roles y el admin inicial en la primera ejecución (idempotente).
+if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Seed:Enabled"))
 {
     using var scope = app.Services.CreateScope();
     await DataSeeder.SeedAsync(
@@ -136,13 +160,15 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Api:SwaggerEnabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// En Desktop la Api escucha solo HTTP en loopback/LAN (sin certificado): no redirigir a HTTPS.
+if (!esDesktop)
+    app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
 
 // Auditoría y excepciones
@@ -153,5 +179,32 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
+
+// Health check anónimo: el cliente WinForms lo consulta para saber si el servicio local y la BD responden.
+app.MapGet("/api/health", (IDbConnectionFactory db, IHostEnvironment env) =>
+{
+    var dbOk = false;
+    try
+    {
+        using var conexion = db.CreateOpenConnection();
+        using var comando = conexion.CreateCommand();
+        comando.CommandText = "SELECT 1";
+        dbOk = Equals(comando.ExecuteScalar(), 1);
+    }
+    catch
+    {
+        // BD caída: se informa en el cuerpo, la Api sigue respondiendo.
+    }
+
+    var cuerpo = new
+    {
+        status = dbOk ? "ok" : "degradado",
+        db = dbOk,
+        version = typeof(Program).Assembly.GetName().Version?.ToString(),
+        modo = env.EnvironmentName,
+        fechaUtc = DateTime.UtcNow
+    };
+    return dbOk ? Results.Ok(cuerpo) : Results.Json(cuerpo, statusCode: StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
 
 app.Run();

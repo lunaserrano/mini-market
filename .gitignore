@@ -15,6 +15,12 @@
 **/appsettings.Local.json
 **/appsettings.Production.json
 **/secrets.json
+# Secretos del modo Desktop (connection string y Jwt:Key cifrados con DPAPI por MiniMarket.ConfigTool).
+# Son específicos de cada máquina: no sirven en otra PC y no se versionan.
+**/appsettings.Secrets.json
+
+# Salida de publish.ps1 (instalables del modo Desktop)
+/dist/
 
 # --- IDEs y editores ---
 .idea/

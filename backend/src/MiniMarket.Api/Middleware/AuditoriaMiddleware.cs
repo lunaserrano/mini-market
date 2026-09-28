@@ -17,7 +17,8 @@ namespace MiniMarket.Api.Middleware;
 /// UseAuthentication pueble HttpContext.User (es el mismo objeto), así que al terminar ya conoce al usuario.
 /// El registro se encola y lo persiste <see cref="AuditoriaWriterService"/>: no añade una escritura a BD a la respuesta.
 ///
-/// Se omiten a propósito: preflights CORS (OPTIONS, los emite el navegador, no el usuario), Swagger y el endpoint donde
+/// Se omiten a propósito: preflights CORS (OPTIONS, los emite el navegador, no el usuario), Swagger, el health check
+/// (el cliente desktop lo consulta cada pocos segundos) y el endpoint donde
 /// el navegador reporta sus clics (registrarlo generaría un evento por cada lote de eventos).
 /// </summary>
 public class AuditoriaMiddleware
@@ -77,6 +78,7 @@ public class AuditoriaMiddleware
     private static bool Omitir(HttpRequest request) =>
         HttpMethods.IsOptions(request.Method)
         || request.Path.StartsWithSegments("/swagger")
+        || request.Path.StartsWithSegments("/api/health")
         || (HttpMethods.IsPost(request.Method) && request.Path.Equals("/api/auditoria/cliente", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Lee el cuerpo JSON (acotado) y deja el stream listo para que MVC lo lea de nuevo.</summary>
