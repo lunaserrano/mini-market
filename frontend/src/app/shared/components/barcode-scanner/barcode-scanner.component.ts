@@ -2,7 +2,21 @@ import { Component, ElementRef, OnDestroy, ViewChild, effect, input, output, sig
 import { DialogModule } from 'primeng/dialog';
 import { MessageService } from 'primeng/api';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
-import { NotFoundException } from '@zxing/library';
+import { BarcodeFormat, DecodeHintType, NotFoundException } from '@zxing/library';
+
+/** Formatos habituales en códigos de barras de productos de retail.
+ * Restringir los formatos (en vez de probar todos, incluyendo 2D) acelera
+ * mucho la detección por frame. */
+const FORMATOS_SOPORTADOS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.ITF,
+  BarcodeFormat.CODABAR
+];
 
 /** Diálogo que abre la cámara trasera del dispositivo y decodifica un código de barras en vivo,
  * usando @zxing/browser (funciona en Android e iOS, a diferencia de la API nativa BarcodeDetector). */
@@ -36,10 +50,24 @@ export class BarcodeScannerComponent implements OnDestroy {
     const videoEl = this.videoRef?.nativeElement;
     if (!videoEl) return;
 
-    this.lector = new BrowserMultiFormatReader();
+    const hints = new Map<DecodeHintType, unknown>([
+      [DecodeHintType.POSSIBLE_FORMATS, FORMATOS_SOPORTADOS],
+      [DecodeHintType.TRY_HARDER, true]
+    ]);
+    this.lector = new BrowserMultiFormatReader(hints, {
+      delayBetweenScanAttempts: 100,
+      delayBetweenScanSuccess: 300
+    });
     try {
       this.controls = await this.lector.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } } },
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet]
+          }
+        },
         videoEl,
         (resultado, err) => {
           if (resultado) {
