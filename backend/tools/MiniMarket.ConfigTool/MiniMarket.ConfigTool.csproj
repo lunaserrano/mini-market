@@ -18,6 +18,7 @@
        no arrastrar Dapper/DbUp/JWT a una herramienta de instalación. -->
   <ItemGroup>
     <Compile Include="..\..\src\MiniMarket.Infrastructure\Security\DpapiProtector.cs" Link="Security\DpapiProtector.cs" />
+    <Compile Include="..\..\src\MiniMarket.Infrastructure\Security\SecretosLocales.cs" Link="Security\SecretosLocales.cs" />
   </ItemGroup>
 
 </Project>

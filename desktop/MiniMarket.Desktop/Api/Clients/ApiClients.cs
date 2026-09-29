@@ -4,7 +4,7 @@ using static MiniMarket.Desktop.Api.ApiHttp;
 namespace MiniMarket.Desktop.Api.Clients;
 
 // Un cliente tipado por controller de MiniMarket.Api (backend/src/MiniMarket.Api/Controllers).
-// Las rutas son relativas a Api:BaseUrl (".../api/"). Los permisos los valida la Api: la UI solo
+// Las rutas son relativas a ".../api/" de la Api embebida (ApiLocal.BaseAddress). Los permisos los valida la Api: la UI solo
 // oculta lo que el usuario no puede usar.
 
 public sealed class HealthApi(ApiHttp http)

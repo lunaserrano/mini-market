@@ -4,9 +4,9 @@ using MiniMarket.Desktop.Forms;
 namespace MiniMarket.Desktop;
 
 /// <summary>
-/// Cliente de escritorio MiniMarket (WinForms). NO accede a la base de datos: toda la lógica de negocio
-/// vive en MiniMarket.Api (servicio Windows local, http://127.0.0.1:5080). Este proceso solo presenta
-/// pantallas y consume la Api por HTTP con JWT.
+/// MiniMarket POS de escritorio (WinForms). Todo corre en este proceso: la Api (MiniMarket.Api, ver
+/// <see cref="ApiLocal"/>) se hospeda aquí mismo en 127.0.0.1 y las pantallas la consumen por HTTP con
+/// JWT, igual que la versión web. Lo único externo que se necesita es SQL Server.
 /// </summary>
 internal static class Program
 {
@@ -14,8 +14,8 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
-        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_, e) => Dialogs.Excepcion(null, e.Exception);
+        System.Windows.Forms.Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        System.Windows.Forms.Application.ThreadException += (_, e) => Dialogs.Excepcion(null, e.Exception);
 
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
@@ -24,28 +24,39 @@ internal static class Program
         });
         builder.Configuration
             .AddJsonFile("appsettings.json", optional: false)
-            // Preferencias del usuario (Sistema > Conexión) sobre los valores instalados.
+            // Preferencias del usuario sobre los valores instalados.
             .AddJsonFile(AppPaths.ConfigUsuario, optional: true);
 
         ConfigurarServicios(builder.Services, builder.Configuration);
 
         using var host = builder.Build();
-        Application.Run(new AppFlow(host.Services));
+        var api = host.Services.GetRequiredService<ApiLocal>();
+        try
+        {
+            System.Windows.Forms.Application.Run(new AppFlow(host.Services));
+        }
+        finally
+        {
+            // Fuera del hilo de UI: Kestrel y AuditoriaWriterService terminan de forma ordenada.
+            Task.Run(api.DetenerAsync).Wait(TimeSpan.FromSeconds(15));
+        }
     }
 
     private static void ConfigurarServicios(IServiceCollection services, IConfiguration configuration)
     {
-        var baseUrl = configuration["Api:BaseUrl"] ?? "http://127.0.0.1:5080/api/";
-        if (!baseUrl.EndsWith('/')) baseUrl += "/";
         var timeout = TimeSpan.FromSeconds(configuration.GetValue("Api:TimeoutSegundos", 30));
+        // El nombre del equipo identifica la caja en la auditoría: con la Api embebida la IP siempre es 127.0.0.1.
+        var userAgent = $"MiniMarket.Desktop/{System.Windows.Forms.Application.ProductVersion.Split('+')[0]} ({Environment.MachineName})";
 
-        void Configurar(HttpClient c)
+        // La dirección se lee al crear cada HttpClient: el puerto lo elige Kestrel al iniciar ApiLocal.
+        void Configurar(IServiceProvider sp, HttpClient c)
         {
-            c.BaseAddress = new Uri(baseUrl);
+            c.BaseAddress = sp.GetRequiredService<ApiLocal>().BaseAddress;
             c.Timeout = timeout;
-            c.DefaultRequestHeaders.UserAgent.ParseAdd($"MiniMarket.Desktop/{Application.ProductVersion.Split('+')[0]}");
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }
 
+        services.AddSingleton<ApiLocal>();
         services.AddSingleton<TokenStore>();
         services.AddSingleton<SessionService>();
         services.AddSingleton<ApiHealthMonitor>();

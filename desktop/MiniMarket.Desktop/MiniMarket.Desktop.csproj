@@ -12,8 +12,16 @@
     <RootNamespace>MiniMarket.Desktop</RootNamespace>
     <Product>MiniMarket POS</Product>
     <Version>1.0.0</Version>
-    <!-- El cliente NO referencia ningún proyecto del backend ni SqlClient: solo habla HTTP con la Api. -->
+    <!-- La Api se hospeda DENTRO de este proceso (Services/ApiLocal.cs): el instalable es una sola
+         carpeta y lo único externo que necesita es SQL Server. MiniMarket.Api es un ejecutable (se
+         despliega solo en Azure) y aquí se usa como biblioteca. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\backend\src\MiniMarket.Api\MiniMarket.Api.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
@@ -25,6 +33,28 @@
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="obfuscar.xml" CopyToOutputDirectory="Never" />
   </ItemGroup>
+
+  <!-- Los appsettings*.json de MiniMarket.Api (Azure, Development, secretos locales de desarrollo) NO
+       deben llegar a la salida ni al instalable: la Api embebida usa el appsettings.json de este proyecto
+       y los secretos cifrados de %ProgramData%\MiniMarket. -->
+  <Target Name="ExcluirAppsettingsDeLaApi" AfterTargets="GetCopyToOutputDirectoryItems">
+    <ItemGroup>
+      <_MmAppsettingsApi Include="@(AllItemsFullPathWithTargetPath)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('appsettings')) And $([System.String]::Copy('%(FullPath)').Contains('MiniMarket.Api'))" />
+      <AllItemsFullPathWithTargetPath Remove="@(_MmAppsettingsApi)" />
+      <_SourceItemsToCopyToOutputDirectory Remove="@(_MmAppsettingsApi)" />
+      <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_MmAppsettingsApi)" />
+      <_SourceItemsToCopyToOutputDirectoryIfDifferent Remove="@(_MmAppsettingsApi)" />
+    </ItemGroup>
+  </Target>
+  <!-- Un target corre una sola vez por build: el publish necesita el suyo. -->
+  <Target Name="ExcluirAppsettingsDeLaApiPublish" AfterTargets="GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <_MmAppsettingsApiPublish Include="@(AllPublishItemsFullPathWithTargetPath)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('appsettings')) And $([System.String]::Copy('%(FullPath)').Contains('MiniMarket.Api'))" />
+      <AllPublishItemsFullPathWithTargetPath Remove="@(_MmAppsettingsApiPublish)" />
+      <_SourceItemsToCopyToPublishDirectory Remove="@(_MmAppsettingsApiPublish)" />
+      <_SourceItemsToCopyToPublishDirectoryAlways Remove="@(_MmAppsettingsApiPublish)" />
+    </ItemGroup>
+  </Target>
 
   <!-- Ofuscación al publicar con -p:Obfuscate=true (ver build/Obfuscar.targets y obfuscar.xml). -->
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\Obfuscar.targets" />

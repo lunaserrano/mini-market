@@ -1,18 +1,17 @@
 using System.Security.Cryptography;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Data.SqlClient;
 using MiniMarket.Infrastructure.Security;
 
-// Herramienta de instalación del modo Desktop. Genera appsettings.Secrets.json junto a la Api con la
-// connection string y la Jwt:Key cifradas con DPAPI (alcance máquina). Debe ejecutarse EN EL EQUIPO
-// donde corre el servicio MiniMarketApi: los valores cifrados no se pueden descifrar en otra PC.
+// Herramienta de instalación del modo Desktop. Genera %ProgramData%\MiniMarket\appsettings.Secrets.json
+// con la connection string y la Jwt:Key cifradas con DPAPI (alcance máquina). Es la alternativa por
+// script a "Configurar conexión" dentro de MiniMarket.Desktop. Debe ejecutarse EN EL EQUIPO donde se
+// usará la app: los valores cifrados no se pueden descifrar en otra PC.
 //
-//   MiniMarket.ConfigTool init --dir "C:\Program Files\MiniMarket\Api" --server ".\SQLEXPRESS"
-//                              --database MiniMarket --user minimarket_api --password "***"
-//   MiniMarket.ConfigTool init --dir ... --integrated          (autenticación de Windows)
+//   MiniMarket.ConfigTool init --server ".\SQLEXPRESS" --database MiniMarket --user minimarket_api --password "***"
+//   MiniMarket.ConfigTool init --integrated                    (autenticación de Windows)
 //   MiniMarket.ConfigTool encrypt "<valor>"                    (cifra un valor suelto -> ENC:...)
-//   MiniMarket.ConfigTool verify --dir ...                     (comprueba que los secretos descifran y conectan)
+//   MiniMarket.ConfigTool verify                               (comprueba que los secretos descifran y conectan)
+//   --dir <carpeta> cambia la carpeta del archivo (por defecto %ProgramData%\MiniMarket).
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
@@ -26,7 +25,7 @@ return args.FirstOrDefault()?.ToLowerInvariant() switch
 
 static int Init(Dictionary<string, string?> o)
 {
-    var dir = o.GetValueOrDefault("dir") ?? AppContext.BaseDirectory;
+    var dir = o.GetValueOrDefault("dir") ?? SecretosLocales.CarpetaPredeterminada;
     var server = o.GetValueOrDefault("server") ?? @".\SQLEXPRESS";
     var database = o.GetValueOrDefault("database") ?? "MiniMarket";
     var integrated = o.ContainsKey("integrated");
@@ -39,7 +38,7 @@ static int Init(Dictionary<string, string?> o)
         // SQL Server Express local usa un certificado autofirmado.
         TrustServerCertificate = true,
         ConnectTimeout = 30,
-        ApplicationName = "MiniMarket.Api"
+        ApplicationName = "MiniMarket"
     };
     if (integrated)
     {
@@ -48,7 +47,7 @@ static int Init(Dictionary<string, string?> o)
     else
     {
         csb.UserID = o.GetValueOrDefault("user") ?? "minimarket_api";
-        // Orden: --password, variable MINIMARKET_SQL_PASSWORD (la usa install-api-service.ps1 para no
+        // Orden: --password, variable MINIMARKET_SQL_PASSWORD (la usa install.ps1 para no
         // exponer la clave en la lista de procesos) o se pide por consola.
         csb.Password = o.GetValueOrDefault("password")
             ?? Environment.GetEnvironmentVariable("MINIMARKET_SQL_PASSWORD")
@@ -63,22 +62,8 @@ static int Init(Dictionary<string, string?> o)
         Console.Error.WriteLine("--force: se guarda la configuración de todas formas.");
     }
 
-    var ruta = Path.Combine(dir, "appsettings.Secrets.json");
-    var existente = File.Exists(ruta) ? JsonNode.Parse(File.ReadAllText(ruta)) as JsonObject : null;
-
-    // Se conserva la Jwt:Key existente (salvo --rotate-jwt): regenerarla invalida las sesiones abiertas.
-    var jwtKeyCifrada = existente?["Jwt"]?["Key"]?.GetValue<string>();
-    if (jwtKeyCifrada is null || o.ContainsKey("rotate-jwt"))
-        jwtKeyCifrada = DpapiProtector.Cifrar(Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)));
-
-    var json = new JsonObject
-    {
-        ["ConnectionStrings"] = new JsonObject { ["DefaultConnection"] = DpapiProtector.Cifrar(csb.ConnectionString) },
-        ["Jwt"] = new JsonObject { ["Key"] = jwtKeyCifrada }
-    };
-
-    Directory.CreateDirectory(dir);
-    File.WriteAllText(ruta, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    var ruta = Path.Combine(dir, SecretosLocales.NombreArchivo);
+    SecretosLocales.Guardar(ruta, csb.ConnectionString, rotarJwt: o.ContainsKey("rotate-jwt"));
     Console.WriteLine($"Secretos cifrados escritos en {ruta}");
     return 0;
 }
@@ -91,7 +76,7 @@ static int Encrypt(string valor)
 
 static int Verify(Dictionary<string, string?> o)
 {
-    var ruta = Path.Combine(o.GetValueOrDefault("dir") ?? AppContext.BaseDirectory, "appsettings.Secrets.json");
+    var ruta = Path.Combine(o.GetValueOrDefault("dir") ?? SecretosLocales.CarpetaPredeterminada, SecretosLocales.NombreArchivo);
     if (!File.Exists(ruta))
     {
         Console.Error.WriteLine($"No existe {ruta}. Ejecute 'init'.");
@@ -100,9 +85,13 @@ static int Verify(Dictionary<string, string?> o)
 
     try
     {
-        var json = JsonNode.Parse(File.ReadAllText(ruta))!;
-        var cs = DpapiProtector.Descifrar(json["ConnectionStrings"]!["DefaultConnection"]!.GetValue<string>());
-        var key = DpapiProtector.Descifrar(json["Jwt"]!["Key"]!.GetValue<string>());
+        var cs = SecretosLocales.LeerConnectionString(ruta);
+        var key = SecretosLocales.LeerJwtKey(ruta);
+        if (cs is null || key is null)
+        {
+            Console.Error.WriteLine($"{ruta} está incompleto. Ejecute 'init'.");
+            return 1;
+        }
         Console.WriteLine($"Jwt:Key descifrada correctamente ({key.Length} caracteres).");
         if (!ProbarConexion(cs, out var error))
         {
@@ -167,9 +156,10 @@ static int Ayuda()
     Console.WriteLine("""
         MiniMarket.ConfigTool — secretos del modo Desktop (DPAPI, alcance máquina)
 
-          init    --dir <carpeta Api> [--server .\SQLEXPRESS] [--database MiniMarket]
+          init    [--server .\SQLEXPRESS] [--database MiniMarket]
                   [--user minimarket_api --password <pwd> | --integrated] [--rotate-jwt] [--force]
-          verify  --dir <carpeta Api>
+          verify
+          (--dir <carpeta> en init/verify; por defecto %ProgramData%\MiniMarket)
           encrypt "<valor>"
         """);
     return 1;

@@ -5,9 +5,9 @@ namespace MiniMarket.Desktop.Services;
 public enum EstadoServicio { Desconocido, EnLinea, SinBaseDatos, Detenido }
 
 /// <summary>
-/// Consulta GET /api/health cada Api:HealthIntervaloSegundos. MainForm lo muestra en la barra de
-/// estado: el sistema es local, así que "sin conexión" significa servicio o SQL Server detenidos,
-/// nunca "sin internet".
+/// Consulta GET /api/health (Api embebida, ver <see cref="ApiLocal"/>) cada Api:HealthIntervaloSegundos.
+/// MainForm lo muestra en la barra de estado: el sistema es local, así que "sin conexión" significa
+/// SQL Server detenido, nunca "sin internet".
 /// </summary>
 public sealed class ApiHealthMonitor : IDisposable
 {

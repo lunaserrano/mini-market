@@ -27,4 +27,16 @@
          SkipNamespace no los cubre. Dapper/System.Text.Json leen sus propiedades por nombre. -->
     <SkipType rx="^&lt;&gt;f__AnonymousType.*" skipMethods="true" skipProperties="true" skipFields="true" skipEvents="true" />
   </Module>
+
+  <!-- Api embebida (Services/ApiLocal.cs): mismas reglas que backend/src/MiniMarket.Api/obfuscar.xml.
+       KeepPublicApi=true conserva lo que DI, controllers, model binding, FluentValidation y Dapper usan
+       por reflexión. Persistence se excluye: Dapper materializa tipos privados por nombre. -->
+  <Module file="$(InPath)\MiniMarket.Application.dll">
+    <SkipType rx="^&lt;&gt;f__AnonymousType.*" skipMethods="true" skipProperties="true" skipFields="true" skipEvents="true" />
+  </Module>
+  <Module file="$(InPath)\MiniMarket.Infrastructure.dll">
+    <SkipNamespace name="MiniMarket.Infrastructure.Persistence" />
+    <SkipNamespace name="MiniMarket.Infrastructure.Persistence.Repositories" />
+    <SkipType rx="^&lt;&gt;f__AnonymousType.*" skipMethods="true" skipProperties="true" skipFields="true" skipEvents="true" />
+  </Module>
 </Obfuscator>

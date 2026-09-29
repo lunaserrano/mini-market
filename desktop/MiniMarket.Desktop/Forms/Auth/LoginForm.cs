@@ -38,7 +38,7 @@ public sealed class LoginForm : Form
         var conexion = new LinkLabel { Text = "Configurar conexión...", AutoSize = true, Margin = new Padding(3, 12, 3, 3) };
         conexion.LinkClicked += (_, _) =>
         {
-            using var dlg = ActivatorUtilities.CreateInstance<ConexionForm>(_services);
+            using var dlg = new ConexionForm(reiniciarAlGuardar: true);
             dlg.ShowDialog(this);
         };
 
@@ -68,13 +68,13 @@ public sealed class LoginForm : Form
     {
         base.OnShown(e);
         _usuario.Focus();
-        _estado.Text = "Verificando servicio local...";
+        _estado.Text = "Verificando base de datos...";
         var estado = await _salud.VerificarAsync();
         (_estado.Text, _estado.ForeColor) = estado switch
         {
-            EstadoServicio.EnLinea => ("● Servicio local en línea", Theme.Exito),
-            EstadoServicio.SinBaseDatos => ("● El servicio responde, pero SQL Server no está disponible", Theme.Advertencia),
-            _ => ("● Servicio local detenido: inicie 'MiniMarketApi' en services.msc", Theme.Peligro)
+            EstadoServicio.EnLinea => ("● Base de datos conectada", Theme.Exito),
+            EstadoServicio.SinBaseDatos => ("● SQL Server no está disponible", Theme.Advertencia),
+            _ => ("● El motor local no responde: reinicie la aplicación", Theme.Peligro)
         };
     }
 

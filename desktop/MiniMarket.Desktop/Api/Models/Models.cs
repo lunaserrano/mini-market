@@ -1,6 +1,6 @@
 // Contratos HTTP de la Api (espejo de backend/src/MiniMarket.Application/DTOs/*.cs).
-// Se duplican a propósito en vez de referenciar MiniMarket.Application: el cliente WinForms no debe
-// depender de ningún ensamblado del backend (desacople total; solo JSON sobre HTTP).
+// Se duplican a propósito en vez de usar los de MiniMarket.Application: aunque la Api corre en este
+// mismo proceso (Services/ApiLocal.cs), las pantallas solo conocen el contrato JSON, no el backend.
 // Este namespace se EXCLUYE de la ofuscación (obfuscar.xml): System.Text.Json los mapea por nombre.
 
 namespace MiniMarket.Desktop.Api.Models;

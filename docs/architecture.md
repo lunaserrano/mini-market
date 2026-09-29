@@ -125,22 +125,29 @@ Swagger disponible en `/swagger` en Development, con soporte de Bearer token.
 
 ## 9. Modo Desktop / offline (rama `market-desktop`)
 
-Versión de escritorio que funciona 100 % local, sin internet:
+Versión de escritorio que funciona 100 % local, sin internet. Todo va en un solo ejecutable; lo
+único externo es SQL Server:
 
 ```
-MiniMarket.Desktop (WinForms) ──HTTP/JWT──► MiniMarket.Api (Windows Service, entorno "Desktop")
-                                                   │
-                                                   ├──► SQL Server Express local (misma base y migraciones)
-                                                   └──► (futuro) Api central en Azure vía SyncBackgroundService
+MiniMarket.Desktop.exe
+  ├── Pantallas WinForms ──HTTP/JWT (127.0.0.1, puerto dinámico)──► MiniMarket.Api embebida (entorno "Desktop")
+  │                                                                      │
+  │                                                                      ├──► SQL Server (local o de la LAN; misma base y migraciones)
+  │                                                                      └──► (futuro) Api central en Azure vía SyncBackgroundService
 ```
 
-- **Desacople**: el cliente WinForms (`desktop/MiniMarket.Desktop`) no referencia ningún proyecto del
-  backend ni `SqlClient`. Replica los DTOs como records propios y consume la misma Api que la web, con
-  refresh automático del JWT (`AuthDelegatingHandler`). La lógica de negocio sigue siendo solo del backend.
-- **Api local**: la misma `MiniMarket.Api`, con `UseWindowsService()` y `appsettings.Desktop.json`:
-  Kestrel en `127.0.0.1:5080`, sin redirección HTTPS, seed habilitado y `GET /api/health`.
-- **Secretos**: `appsettings.Secrets.json` (fuera del repo) con valores `ENC:` cifrados por DPAPI de
-  máquina (`DpapiProtector`), generados por `backend/tools/MiniMarket.ConfigTool` y descifrados en
+- **Api embebida**: `desktop/MiniMarket.Desktop/Services/ApiLocal.cs` hospeda la misma
+  `MiniMarket.Api` dentro del proceso WinForms: Kestrel solo en loopback con puerto 0 (lo asigna el
+  sistema), migraciones + seed al abrir, se detiene al cerrar. No hay servicio Windows. El arranque
+  (servicios, pipeline, migraciones) vive en `MiniMarket.Api/ApiHost.cs` y lo comparten
+  `Program.cs` (Azure) y el Desktop.
+- **Pantallas desacopladas**: los formularios solo conocen el contrato JSON (DTOs replicados como
+  records propios) y consumen la Api por HTTP con refresh automático del JWT
+  (`AuthDelegatingHandler`), igual que la web. La lógica de negocio sigue siendo solo del backend.
+- **Varias cajas**: cada PC corre su propia Api embebida contra el mismo SQL Server.
+- **Secretos**: `%ProgramData%\MiniMarket\appsettings.Secrets.json` (fuera del repo) con valores `ENC:`
+  cifrados por DPAPI de máquina (`DpapiProtector`, `SecretosLocales`), escritos desde la app
+  (*Conexión con la base de datos*) o por `backend/tools/MiniMarket.ConfigTool`, y descifrados en
   memoria (`AddDecryptedValues`). El cliente guarda el refresh token con DPAPI de usuario.
 - **Ofuscación**: Obfuscar al publicar (`-p:Obfuscate=true`, `build/Obfuscar.targets`). Se ofuscan
   Application, Infrastructure (excepto Persistence y los tipos anónimos, que Dapper lee por nombre) y

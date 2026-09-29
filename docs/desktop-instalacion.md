@@ -1,25 +1,30 @@
 # MiniMarket Desktop — Instalación local (offline)
 
-Guía para instalar MiniMarket en una tienda **sin depender de internet**: la base de datos, la Api y
-el cliente de escritorio corren en la misma PC (o en una PC "servidor" de la red local).
+Guía para instalar MiniMarket en una tienda **sin depender de internet**. Todo el sistema va en un
+solo programa: lo único externo que necesita es **SQL Server**.
 
 ```
-┌──────────────────────┐   HTTP + JWT    ┌───────────────────────────┐   SQL (login    ┌──────────────────────┐
-│ MiniMarket.Desktop   │ ──────────────► │ MiniMarket.Api            │ ──────────────► │ SQL Server Express   │
-│ (WinForms, cada caja)│  127.0.0.1:5080 │ (servicio "MiniMarketApi")│  minimarket_api)│ base "MiniMarket"    │
-└──────────────────────┘                 └───────────────────────────┘                 └──────────────────────┘
-        sin acceso a la BD                   toda la lógica de negocio                     solo la Api se conecta
-                                                     │
-                                                     └── (futuro) SyncBackgroundService ──► Api central en Azure
+┌──────────────────────────────────────────────────────┐   SQL (login     ┌──────────────────────┐
+│ MiniMarket.Desktop.exe                               │ ───────────────► │ SQL Server Express   │
+│  ┌───────────────┐  HTTP+JWT   ┌──────────────────┐  │  minimarket_api) │ base "MiniMarket"    │
+│  │ Pantallas     │ ──────────► │ MiniMarket.Api   │  │                  └──────────────────────┘
+│  │ (WinForms)    │ 127.0.0.1:* │ (embebida)       │  │
+│  └───────────────┘             └──────────────────┘  │
+└──────────────────────────────────────────────────────┘
+      un solo proceso: la Api arranca y se detiene con la ventana
 ```
 
-- El cliente WinForms **nunca** se conecta a SQL Server: solo consume la Api por HTTP.
-- La Api es la misma que usa la versión web (mismas reglas de negocio, permisos y auditoría), en
-  el entorno `Desktop`.
-- Los secretos (connection string, clave JWT) se guardan **cifrados con DPAPI** y solo se pueden
-  descifrar en el equipo donde se generaron. El refresh token del cliente ("Recordar sesión") se
-  cifra con DPAPI del usuario de Windows.
-- Los binarios de la Api y del cliente se distribuyen **ofuscados** (Obfuscar).
+- **No hay servicio Windows**: la Api (`MiniMarket.Api`, la misma de la versión web: reglas de
+  negocio, permisos, validaciones y auditoría) corre **dentro** de `MiniMarket.Desktop.exe`, en el
+  entorno `Desktop`. Escucha solo en `127.0.0.1` con un puerto elegido al azar al abrir la app: no
+  es accesible desde la red y no hay puertos que configurar.
+- Al abrirse, la app aplica las migraciones de la base (DbUp) y el seed inicial, igual que hacía el
+  servicio.
+- La conexión con SQL Server y la clave JWT se guardan **cifradas con DPAPI de máquina** en
+  `%ProgramData%\MiniMarket\appsettings.Secrets.json`: solo se pueden descifrar en ese equipo. El
+  refresh token ("Recordar sesión") se cifra con DPAPI del usuario de Windows.
+- Los binarios se distribuyen **ofuscados** (Obfuscar) y **self-contained**: el equipo de la tienda
+  no necesita tener .NET instalado.
 
 ---
 
@@ -29,12 +34,12 @@ el cliente de escritorio corren en la misma PC (o en una PC "servidor" de la red
 |---|---|---|
 | Windows | 10/11 o Server 2016+ (x64) | |
 | SQL Server Express | 2019 o 2022 | Gratis. Instancia `SQLEXPRESS`, **autenticación mixta** |
-| sqlcmd | 16+ | Viene con SQL Server / SSMS |
-| .NET SDK 9 | 9.0.x | **Solo en la PC donde se compila** (`publish.ps1`). El equipo de la tienda NO lo necesita: los instalables son self-contained |
+| sqlcmd | 16+ | Viene con SQL Server / SSMS. Solo para crear la base (paso 3) |
+| .NET SDK 9 | 9.0.x | **Solo en la PC donde se compila** (`publish.ps1`) |
 
 ---
 
-## Paso 1 — Compilar los instalables (PC de desarrollo)
+## Paso 1 — Compilar el instalable (PC de desarrollo)
 
 Desde la raíz del repositorio:
 
@@ -46,14 +51,14 @@ Genera `dist\` con:
 
 | Carpeta | Contenido |
 |---|---|
-| `dist\api` | Api (servicio Windows), ofuscada, **sin** credenciales de Azure ni `Jwt:Key` |
-| `dist\desktop` | Cliente WinForms ofuscado (`MiniMarket.Desktop.exe`) |
-| `dist\tools` | `MiniMarket.ConfigTool.exe` (cifra los secretos en el equipo destino) |
-| `dist\install` | Scripts de instalación, `00_setup_local.sql` y esta guía |
+| `dist\app` | `MiniMarket.Desktop.exe` con la Api embebida, ofuscado y **sin** credenciales |
+| `dist\tools` | `MiniMarket.ConfigTool.exe` (opcional: configurar la conexión por script) |
+| `dist\install` | `install.ps1`, `uninstall.ps1`, `backup-db.ps1`, `00_setup_local.sql` y esta guía |
 
-`-SinOfuscar` genera binarios sin ofuscar (útil para diagnosticar). El mapa de nombres de la
-ofuscación (para leer stack traces) queda en `obj\obfuscar\Mapping.txt` de cada proyecto: **no se
-distribuye**.
+El script falla si en `dist\app` aparece cualquier `appsettings.*.json` o si `appsettings.json`
+trae connection string o `Jwt:Key`. `-SinOfuscar` genera binarios sin ofuscar (útil para
+diagnosticar). El mapa de la ofuscación (para leer stack traces) queda en
+`desktop\MiniMarket.Desktop\obj\obfuscar\Mapping.txt`: **no se distribuye**.
 
 Copie la carpeta `dist` completa al equipo de la tienda (USB, red...).
 
@@ -65,7 +70,7 @@ Copie la carpeta `dist` completa al equipo de la tienda (USB, red...).
    Windows: SSMS → propiedades del servidor → Seguridad → "Autenticación de SQL Server y Windows",
    y reinicie el servicio `SQL Server (SQLEXPRESS)`.
 
-## Paso 3 — Crear la base y el login del servicio
+## Paso 3 — Crear la base y el login
 
 Como administrador, en `dist\install`:
 
@@ -77,39 +82,55 @@ sqlcmd -S .\SQLEXPRESS -E -C -b -i 00_setup_local.sql `
 - Las **tres** variables son obligatorias.
 - Crea la base (recuperación SIMPLE, `READ_COMMITTED_SNAPSHOT`) y el login `minimarket_api`.
   Si la base ya existía, no modifica su configuración.
-- **No** crea tablas: la Api aplica `database/migrations/*.sql` automáticamente al arrancar (DbUp),
+- **No** crea tablas: la app aplica `database/migrations/*.sql` automáticamente al abrirse (DbUp),
   así la base local siempre tiene el mismo esquema que la central.
 
-## Paso 4 — Instalar el servicio y el cliente
+## Paso 4 — Instalar MiniMarket
 
 PowerShell **como administrador**, en `dist\install`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install-api-service.ps1 -SqlServer ".\SQLEXPRESS" -Database MiniMarket -SqlUser minimarket_api
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 El script:
 
-1. Copia la Api, el cliente y las herramientas a `C:\Program Files\MiniMarket\{Api,Desktop,Tools}`.
-2. Pide la contraseña SQL y ejecuta `MiniMarket.ConfigTool init`. Este prueba la conexión y genera
-   `Api\appsettings.Secrets.json` con la connection string y una `Jwt:Key` aleatoria **cifradas
-   (DPAPI de máquina)**. El archivo solo lo pueden leer SYSTEM y los Administradores.
-3. Registra el servicio `MiniMarketApi` con inicio automático, reinicio ante fallos y entorno
-   `Desktop`.
-4. Inicia el servicio. El primer arranque aplica las migraciones y crea la empresa demo, la
-   sucursal, los roles y el usuario `admin`. Luego verifica `http://127.0.0.1:5080/api/health`.
-5. Crea el acceso directo **MiniMarket POS** en el Escritorio público.
+1. Copia la app a `C:\Program Files\MiniMarket\App` y las herramientas a `...\Tools`.
+2. Crea `%ProgramData%\MiniMarket` (donde se guarda la conexión cifrada) con permiso de escritura
+   para los usuarios del equipo, para que la conexión se pueda configurar desde la app.
+3. Registra el origen `MiniMarket` en el Visor de eventos.
+4. Crea el acceso directo **MiniMarket POS** en el Escritorio público y en el menú Inicio.
 
-Si se vuelve a ejecutar para una **actualización**, conserva los secretos existentes.
+Opciones:
+
+| Parámetro | Efecto |
+|---|---|
+| `-SqlServer ".\SQLEXPRESS" [-Database MiniMarket] [-SqlUser minimarket_api]` | Configura la conexión durante la instalación (pide la contraseña de forma segura) |
+| `-Integrada` | Con `-SqlServer`: usa autenticación de Windows en vez de usuario SQL |
+| `-RestringirConfiguracion` | Solo los administradores podrán cambiar la conexión después (úselo junto con `-SqlServer`) |
+
+**Actualizar**: vuelva a ejecutar `install.ps1` con el nuevo `dist`. Cierra la app si está
+abierta, reemplaza los archivos y conserva la conexión configurada.
+
+**Desde la versión anterior (con servicio `MiniMarketApi`)**: `install.ps1` elimina el servicio, la
+regla de firewall y las carpetas `Api`/`Desktop`, y **conserva la conexión** que ya estaba
+configurada (se copia a `%ProgramData%\MiniMarket`).
 
 ## Paso 5 — Primer ingreso
 
-1. Abra **MiniMarket POS**. La pantalla de login debe indicar "● Servicio local en línea".
-2. Usuario `admin`, contraseña `Admin123!`.
-3. **Cambie la contraseña de inmediato**: Sistema → Cambiar contraseña.
-4. Administración → Configuración de la empresa: nombre, NIT, moneda e IVA (salen en el ticket).
-5. Administración → Roles y permisos / Usuarios: cree los cajeros.
-6. Operación → Caja → *Abrir caja* y comience a vender (F9 abre el punto de venta).
+1. Abra **MiniMarket POS**. Si la conexión no se configuró en el paso 4, aparece
+   *Conexión con la base de datos*: servidor (`.\SQLEXPRESS`), base (`MiniMarket`), usuario
+   (`minimarket_api`) y contraseña → *Probar conexión* → *Guardar*.
+2. La primera vez tarda unos segundos más: aplica las migraciones y crea la empresa demo, la
+   sucursal, los roles y el usuario `admin`.
+3. El login debe indicar "● Base de datos conectada". Usuario `admin`, contraseña `Admin123!`.
+4. **Cambie la contraseña de inmediato**: Sistema → Cambiar contraseña.
+5. Administración → Configuración de la empresa: nombre, NIT, moneda e IVA (salen en el ticket).
+6. Administración → Roles y permisos / Usuarios: cree los cajeros.
+7. Operación → Caja → *Abrir caja* y comience a vender (F9 abre el punto de venta).
+
+La conexión se puede cambiar luego desde el login (*Configurar conexión...*) o Sistema → Conexión
+(requiere reiniciar la app).
 
 ### Atajos del punto de venta
 
@@ -124,7 +145,7 @@ Si se vuelve a ejecutar para una **actualización**, conserva los secretos exist
 
 ### Impresora de tickets
 
-En `C:\Program Files\MiniMarket\Desktop\appsettings.json`:
+En `C:\Program Files\MiniMarket\App\appsettings.json`:
 
 ```json
 "Ticket": { "AnchoMm": 80, "Impresora": "POS-80" }
@@ -136,30 +157,38 @@ Si `Impresora` está vacío, se usa la impresora predeterminada de Windows. Para
 
 ## Varias cajas en la red local
 
-1. En la PC servidor, instale con acceso en red. El script abre el puerto 5080 en el firewall
-   (perfiles Privado/Dominio):
+Cada caja lleva su propia copia completa de MiniMarket y **todas se conectan al mismo SQL Server**
+(ya no hay una Api central en la red que pueda caerse: si una caja se apaga, las demás siguen).
+
+1. En la PC que tiene SQL Server, habilite el acceso en red:
+   - *SQL Server Configuration Manager* → Protocolos de SQLEXPRESS → **TCP/IP: Habilitado**, y
+     reinicie el servicio de SQL Server.
+   - Inicie el servicio **SQL Server Browser** (tipo de inicio: Automático) para usar el nombre de
+     instancia (`PC-SERVIDOR\SQLEXPRESS`).
+   - Firewall (perfiles Privado/Dominio): permita `sqlservr.exe` y el puerto UDP 1434 (Browser).
+2. Asigne IP fija (o un nombre estable) a esa PC.
+3. En cada caja ejecute `install.ps1`, por ejemplo:
    ```powershell
-   .\install-api-service.ps1 -AccesoRed
+   .\install.ps1 -SqlServer "PC-SERVIDOR\SQLEXPRESS" -RestringirConfiguracion
    ```
-2. En cada caja copie solo `dist\desktop`, abra la app → *Configurar conexión...* (o Sistema →
-   Conexión) → `http://<IP-del-servidor>:5080/api/` → *Probar conexión* → Guardar.
-3. Asigne IP fija al servidor. El tráfico es HTTP dentro de la LAN: no exponga el puerto 5080 a
-   internet.
+   o configure la conexión al abrir la app por primera vez.
+
+No exponga SQL Server a internet.
 
 ---
 
 ## Respaldos
 
-Sin nube, el respaldo es la única protección ante una falla de disco. Programe un respaldo diario,
-idealmente a un USB o NAS:
+Sin nube, el respaldo es la única protección ante una falla de disco. Programe un respaldo diario
+en la PC de SQL Server, idealmente a un USB o NAS:
 
 ```powershell
 schtasks /Create /SC DAILY /ST 22:00 /RU SYSTEM /TN "MiniMarket Backup" `
   /TR "powershell -ExecutionPolicy Bypass -File \"C:\Program Files\MiniMarket\Tools\backup-db.ps1\" -Carpeta D:\Respaldos"
 ```
 
-`backup-db.ps1` conserva los últimos 14 días. Para restaurar: detenga el servicio `MiniMarketApi` y
-restaure el `.bak` con SSMS.
+`backup-db.ps1` conserva los últimos 14 días. Para restaurar: cierre MiniMarket en **todas** las
+cajas y restaure el `.bak` con SSMS.
 
 ---
 
@@ -167,41 +196,42 @@ restaure el `.bak` con SSMS.
 
 | Síntoma | Causa / solución |
 |---|---|
-| Login: "● Servicio local detenido" | `services.msc` → iniciar **MiniMarket Api (local)**. Si no arranca: Visor de eventos → Registros de Windows → Aplicación, origen `MiniMarketApi` |
-| "SQL Server no disponible" | Servicio `SQL Server (SQLEXPRESS)` detenido, o la contraseña del login cambió → `Tools\MiniMarket.ConfigTool.exe verify --dir "C:\Program Files\MiniMarket\Api"` y, si falla, borrar `appsettings.Secrets.json` y reinstalar |
-| "No se pudo descifrar 'ConnectionStrings:DefaultConnection'" | Se copió `appsettings.Secrets.json` desde otra PC. DPAPI es por equipo: vuelva a generarlo con `ConfigTool init` |
-| Puerto 5080 ocupado | Reinstale con `-Puerto 5090` y cambie la URL en Sistema → Conexión |
+| Al abrir: "No se pudo iniciar MiniMarket" | SQL Server detenido o datos de conexión incorrectos. *Detalle técnico* muestra el error exacto; *Configurar conexión...* permite corregirlos y *Reintentar* vuelve a intentar |
+| "SQL Server no disponible" (barra de estado) | Se perdió la conexión con SQL Server después de abrir la app. Al volver SQL Server, la app se recupera sola |
+| "No puede escribir en C:\ProgramData\MiniMarket" al guardar la conexión | Se instaló con `-RestringirConfiguracion`: configure la conexión como administrador o con `install.ps1 -SqlServer ...` |
+| Pide la conexión otra vez | `appsettings.Secrets.json` se copió desde otra PC o se dañó. DPAPI es por equipo: vuelva a configurarla |
+| Errores inesperados | Visor de eventos → Registros de Windows → Aplicación, origen `MiniMarket` |
 | Sesión expira seguido | El access token dura 15 min y se renueva solo. Si se revocan las sesiones del usuario (o se cambia su contraseña) debe volver a ingresar |
 
 Comandos útiles:
 
 ```powershell
-Get-Service MiniMarketApi
-Invoke-RestMethod http://127.0.0.1:5080/api/health
-& "C:\Program Files\MiniMarket\Tools\MiniMarket.ConfigTool.exe" verify --dir "C:\Program Files\MiniMarket\Api"
+& "C:\Program Files\MiniMarket\Tools\MiniMarket.ConfigTool.exe" verify
+Get-EventLog -LogName Application -Source MiniMarket -Newest 20
 ```
 
-Desinstalar (no borra la base de datos): `dist\install\uninstall-api-service.ps1`.
+Desinstalar (no borra la base de datos): `dist\install\uninstall.ps1` (`-BorrarConfiguracion`
+también elimina la conexión guardada).
 
 ---
 
-## Desarrollo (sin instalar el servicio)
+## Desarrollo
 
 ```powershell
 # 1. Base local de desarrollo
 sqlcmd -S . -E -C -b -i database\desktop\00_setup_local.sql -v DbName="MiniMarketDev" ApiLogin="minimarket_dev" ApiPassword="Dev#Local2026"
 
-# 2. Secretos cifrados junto al binario de la Api
-dotnet build backend\MiniMarket.sln
-dotnet run --project backend\tools\MiniMarket.ConfigTool -- init --dir backend\src\MiniMarket.Api\bin\Debug\net9.0 --server . --database MiniMarketDev --user minimarket_dev --password "Dev#Local2026"
-
-# 3. Api en modo Desktop (desde su carpeta de salida, que es donde está appsettings.Secrets.json)
-cd backend\src\MiniMarket.Api\bin\Debug\net9.0
-$env:ASPNETCORE_ENVIRONMENT = "Desktop"; .\MiniMarket.Api.exe
-
-# 4. Cliente
+# 2a. Opción A: conexión por variables de entorno (no escribe nada en ProgramData)
+$env:ConnectionStrings__DefaultConnection = "Server=.;Database=MiniMarketDev;User Id=minimarket_dev;Password=Dev#Local2026;TrustServerCertificate=True"
+$env:Jwt__Key = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Max 256 }) -as [byte[]])
 dotnet run --project desktop\MiniMarket.Desktop
+
+# 2b. Opción B: ejecutar la app y configurar la conexión en el diálogo del primer arranque
+#     (queda cifrada en %ProgramData%\MiniMarket, como en una tienda)
 ```
+
+La Api sigue pudiendo ejecutarse sola para la versión web (`dotnet run --project backend\src\MiniMarket.Api`);
+el arranque compartido está en `backend/src/MiniMarket.Api/ApiHost.cs`.
 
 `appsettings.Secrets.json` está en `.gitignore`: nunca se versiona.
 
@@ -235,6 +265,8 @@ Pasos para habilitarla:
 4. **Autenticación nodo → nube**: un client credential por nodo (Azure AD / clave de API), guardado
    cifrado con `ConfigTool encrypt` en `appsettings.Secrets.json` (`Sync:ClientSecret`).
 5. Registrar `AzureSyncService` en lugar de `NoOpSyncService` (`DependencyInjection.cs`) y poner
-   `Sync:Enabled=true` y `Sync:AzureApiUrl` en `appsettings.Desktop.json`.
+   `Sync:Enabled=true` y `Sync:AzureApiUrl` en `App\appsettings.json`.
+6. **Con varias cajas**, cada app corre su propio `SyncBackgroundService`: antes de habilitarlo,
+   asegurar que un solo nodo sincronice (p. ej. un lock con `sp_getapplock` sobre la base compartida).
 
 Sin conexión, el ciclo falla en silencio y reintenta: la tienda sigue vendiendo con normalidad.

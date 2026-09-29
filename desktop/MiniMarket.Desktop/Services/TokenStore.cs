@@ -59,6 +59,6 @@ public static class AppPaths
     public static string DatosUsuario { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniMarket");
 
-    /// <summary>Configuración del usuario que sobrescribe appsettings.json (URL de la Api elegida en Sistema > Conexión).</summary>
+    /// <summary>Configuración del usuario de Windows que sobrescribe appsettings.json (ej. Ticket:Impresora).</summary>
     public static string ConfigUsuario => Path.Combine(DatosUsuario, "desktop.settings.json");
 }

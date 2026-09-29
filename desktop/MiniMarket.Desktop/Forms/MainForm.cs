@@ -24,7 +24,7 @@ public sealed class MainForm : Form
     private readonly SessionService _sesion;
     private readonly ApiHealthMonitor _salud;
 
-    private readonly ToolStripStatusLabel _lblServicio = new() { Text = "● Verificando servicio..." };
+    private readonly ToolStripStatusLabel _lblServicio = new() { Text = "● Verificando base de datos..." };
     private readonly ToolStripStatusLabel _lblReloj = new();
     private readonly System.Windows.Forms.Timer _reloj = new() { Interval = 1000 };
 
@@ -88,7 +88,7 @@ public sealed class MainForm : Form
         });
         sistema.DropDownItems.Add("Conexión...", null, (_, _) =>
         {
-            using var dlg = ActivatorUtilities.CreateInstance<ConexionForm>(_services);
+            using var dlg = new ConexionForm(reiniciarAlGuardar: true);
             dlg.ShowDialog(this);
         });
         sistema.DropDownItems.Add(new ToolStripSeparator());
@@ -154,7 +154,7 @@ public sealed class MainForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        // El login ya verificó el servicio: el evento solo avisa cambios, así que se pinta el estado actual.
+        // El login ya verificó la base de datos: el evento solo avisa cambios, así que se pinta el estado actual.
         OnEstadoServicio(this, _salud.Estado);
         _salud.Iniciar();
         // El cajero entra directo al punto de venta.
@@ -168,9 +168,9 @@ public sealed class MainForm : Form
         {
             (_lblServicio.Text, _lblServicio.ForeColor) = estado switch
             {
-                EstadoServicio.EnLinea => ("● Servicio local en línea", Theme.Exito),
+                EstadoServicio.EnLinea => ("● Base de datos conectada", Theme.Exito),
                 EstadoServicio.SinBaseDatos => ("● SQL Server no disponible", Theme.Advertencia),
-                EstadoServicio.Detenido => ("● Servicio local detenido", Theme.Peligro),
+                EstadoServicio.Detenido => ("● Motor local detenido: reinicie la aplicación", Theme.Peligro),
                 _ => ("● Verificando...", Theme.TextoSuave)
             };
         });

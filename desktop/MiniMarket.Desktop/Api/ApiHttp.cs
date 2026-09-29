@@ -82,12 +82,11 @@ public sealed class ApiHttp
         catch (HttpRequestException ex)
         {
             throw new ApiException(null,
-                "No se pudo conectar con el servicio local de MiniMarket.\n" +
-                "Verifique que el servicio 'MiniMarketApi' esté iniciado (services.msc) y la URL en Sistema > Conexión.", inner: ex);
+                "No se pudo comunicar con el motor local de MiniMarket.\nCierre y vuelva a abrir la aplicación.", inner: ex);
         }
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new ApiException(null, "El servicio local no respondió a tiempo.", inner: ex);
+            throw new ApiException(null, "MiniMarket no respondió a tiempo. Verifique que SQL Server esté disponible.", inner: ex);
         }
 
         if (respuesta.IsSuccessStatusCode || (permitir404 && respuesta.StatusCode == HttpStatusCode.NotFound))

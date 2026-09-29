@@ -1,8 +1,8 @@
 -- ============================================================
 -- 00_setup_local.sql — Script SQL inicial del modo Desktop (offline, SQL Server Express)
 --
--- Crea la base de datos local y el login con el que se conecta el servicio MiniMarketApi.
--- Las TABLAS y STORED PROCEDURES no se crean aquí: la Api aplica database/migrations/*.sql con DbUp
+-- Crea la base de datos local y el login con el que se conecta MiniMarket (la Api embebida en MiniMarket.Desktop).
+-- Las TABLAS y STORED PROCEDURES no se crean aquí: la app aplica database/migrations/*.sql con DbUp
 -- en cada arranque (DatabaseMigrator.ApplyMigrations), así la base local siempre queda en la misma
 -- versión de esquema que la central de Azure. Luego el seed (Seed:Enabled) crea empresa, sucursal,
 -- roles y el usuario admin.

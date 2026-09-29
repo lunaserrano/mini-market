@@ -4,7 +4,7 @@ namespace MiniMarket.Desktop.Api;
 
 /// <summary>
 /// Error devuelto por la Api (cuerpo { "error": "...", "errores": { campo: [..] } } de
-/// ExceptionHandlingMiddleware) o fallo de conexión con el servicio local (StatusCode = null).
+/// ExceptionHandlingMiddleware) o fallo de conexión con la Api embebida (StatusCode = null).
 /// </summary>
 public sealed class ApiException : Exception
 {

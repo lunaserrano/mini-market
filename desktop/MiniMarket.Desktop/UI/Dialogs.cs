@@ -22,7 +22,7 @@ public static class Dialogs
         switch (ex)
         {
             case ApiException api when api.SinConexion:
-                Error(owner, api.Message, "Servicio local no disponible");
+                Error(owner, api.Message, "MiniMarket no disponible");
                 break;
             case ApiException api:
                 Aviso(owner, api.MensajeCompleto);
