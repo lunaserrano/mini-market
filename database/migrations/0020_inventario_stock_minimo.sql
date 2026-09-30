@@ -1,5 +1,5 @@
 -- ============================================================
--- 0019_inventario_stock_minimo.sql
+-- 0020_inventario_stock_minimo.sql
 -- Permite configurar el stock mínimo de un producto por sucursal desde la pantalla de Inventario.
 -- Cuando el stock actual llega a ese mínimo, el frontend muestra una alerta (campanita de
 -- notificaciones). Si el producto aún no tiene fila en market.Inventario, se crea con stock 0.
