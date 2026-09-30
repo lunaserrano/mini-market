@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AjusteInventarioRequest, Inventario, MovimientoInventario } from '../models/inventario.models';
+import { AjusteInventarioRequest, Inventario, MovimientoInventario, StockMinimoRequest } from '../models/inventario.models';
 
 @Injectable({ providedIn: 'root' })
 export class InventarioService {
@@ -20,6 +20,10 @@ export class InventarioService {
 
   ajustar(request: AjusteInventarioRequest): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/ajuste`, request);
+  }
+
+  actualizarStockMinimo(request: StockMinimoRequest): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/stock-minimo`, request);
   }
 
   listarMovimientos(productoId?: number, sucursalId?: number): Observable<MovimientoInventario[]> {

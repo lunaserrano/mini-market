@@ -10,7 +10,6 @@ export class MonedaPipe implements PipeTransform {
   private readonly config = inject(ConfigService);
 
   transform(valor: number | null | undefined): string {
-    const monto = (valor ?? 0).toFixed(2);
-    return `${this.config.simboloMoneda()}${monto}`;
+    return this.config.formatear(valor);
   }
 }

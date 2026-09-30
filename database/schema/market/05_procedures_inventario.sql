@@ -93,3 +93,18 @@ BEGIN
     ORDER BY m.FechaMovimiento DESC;
 END
 GO
+
+-- Upsert del stock mínimo (ver migración 0019): si el producto aún no tiene fila, se crea con stock 0.
+CREATE OR ALTER PROCEDURE market.usp_Inventario_ActualizarStockMinimo
+    @ProductoId INT, @SucursalId INT, @StockMinimo DECIMAL(18,4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE market.Inventario SET StockMinimo = @StockMinimo, FechaActualizacion = SYSUTCDATETIME()
+    WHERE ProductoId = @ProductoId AND SucursalId = @SucursalId;
+
+    IF @@ROWCOUNT = 0
+        INSERT INTO market.Inventario (ProductoId, SucursalId, StockActual, StockMinimo, FechaActualizacion)
+        VALUES (@ProductoId, @SucursalId, 0, @StockMinimo, SYSUTCDATETIME());
+END
+GO

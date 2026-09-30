@@ -1,6 +1,8 @@
 <div class="flex justify-between items-center mb-4">
   <h1 class="text-xl font-bold">Inventario</h1>
-  <p-button label="Ajustar stock" icon="pi pi-sliders-h" (onClick)="abrirAjuste()" />
+  @if (puedeAjustar) {
+    <p-button label="Ajustar stock" icon="pi pi-sliders-h" (onClick)="abrirAjuste()" />
+  }
 </div>
 
 <p-tabs value="0">
@@ -10,6 +12,14 @@
   </p-tablist>
   <p-tabpanels>
     <p-tabpanel value="0">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        @if (puedeAjustar) {
+          <p class="m-0 text-xs text-surface-500"><i class="pi pi-info-circle mr-1"></i>Doble clic sobre un producto para ajustar su stock o su stock mínimo.</p>
+        }
+        @if (totalStockBajo() > 0) {
+          <p-tag severity="warn" icon="pi pi-exclamation-triangle" [value]="totalStockBajo() + (totalStockBajo() === 1 ? ' producto' : ' productos') + ' en stock mínimo'" />
+        }
+      </div>
       <div class="mm-table-wrap">
       <p-table [value]="inventario()" [loading]="cargando()" styleClass="p-datatable-sm" [paginator]="true" [rows]="15">
         <ng-template #header>
@@ -17,13 +27,34 @@
             <th>Producto</th>
             <th>Stock actual</th>
             <th>Stock mínimo</th>
+            <th>Estado</th>
+            @if (puedeAjustar) {
+              <th style="width: 60px"></th>
+            }
           </tr>
         </ng-template>
         <ng-template #body let-item>
-          <tr>
+          <tr
+            [class.cursor-pointer]="puedeAjustar"
+            class="select-none"
+            [title]="puedeAjustar ? 'Doble clic para ajustar' : ''"
+            (dblclick)="abrirAjuste(item)"
+          >
             <td>{{ item.productoNombre }}</td>
-            <td [class.text-red-500]="item.stockActual <= item.stockMinimo">{{ item.stockActual }}</td>
-            <td>{{ item.stockMinimo }}</td>
+            <td [class.text-red-500]="esStockBajo(item)" [class.font-semibold]="esStockBajo(item)">{{ item.stockActual }}</td>
+            <td>{{ item.stockMinimo > 0 ? item.stockMinimo : '—' }}</td>
+            <td>
+              @if (esStockBajo(item)) {
+                <p-tag [severity]="item.stockActual <= 0 ? 'danger' : 'warn'" [value]="item.stockActual <= 0 ? 'Agotado' : 'Stock mínimo'" />
+              } @else {
+                <p-tag severity="success" value="Normal" />
+              }
+            </td>
+            @if (puedeAjustar) {
+              <td>
+                <p-button icon="pi pi-sliders-h" [text]="true" [rounded]="true" severity="secondary" title="Ajustar" (onClick)="abrirAjuste(item)" />
+              </td>
+            }
           </tr>
         </ng-template>
       </p-table>
@@ -58,15 +89,32 @@
   </p-tabpanels>
 </p-tabs>
 
-<p-dialog header="Ajustar stock" [(visible)]="mostrarAjuste" [modal]="true" [style]="{ width: '26rem' }">
+<p-dialog header="Ajustar stock" [(visible)]="mostrarAjuste" [modal]="true" [style]="{ width: '28rem' }" [breakpoints]="{ '575px': '95vw' }">
   <div class="flex flex-col gap-3">
-    <div class="flex flex-col gap-1">
-      <label class="text-sm">Producto</label>
-      <p-select appendTo="body" [(ngModel)]="ajuste.productoId" [options]="productos()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" [filter]="true" />
-    </div>
+    @if (itemSeleccionado(); as item) {
+      <div class="rounded-lg bg-surface-100 dark:bg-surface-800 px-3 py-2">
+        <p class="m-0 font-semibold">{{ item.productoNombre }}</p>
+        <p class="m-0 text-sm text-surface-500">Stock actual: {{ item.stockActual }}</p>
+      </div>
+    } @else {
+      <div class="flex flex-col gap-1">
+        <label class="text-sm">Producto</label>
+        <p-select appendTo="body" [ngModel]="ajuste.productoId" (ngModelChange)="cambiarProducto($event)" [options]="productos()" optionLabel="nombre" optionValue="id" placeholder="Selecciona..." styleClass="w-full" [filter]="true" />
+      </div>
+    }
     <div class="flex flex-col gap-1">
       <label class="text-sm">Cantidad (positivo suma, negativo resta)</label>
       <input type="number" step="0.01" class="mm-input-number" [(ngModel)]="ajuste.cantidadAjuste" />
+      @if (stockResultante() !== null && ajuste.cantidadAjuste) {
+        <small [class.text-red-500]="stockResultante()! < 0" [class.text-surface-500]="stockResultante()! >= 0">
+          Quedará en {{ stockResultante() }}
+        </small>
+      }
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">Stock mínimo</label>
+      <input type="number" min="0" step="0.01" class="mm-input-number" [(ngModel)]="ajuste.stockMinimo" />
+      <small class="text-surface-500">Al llegar a esta cantidad recibirás una alerta. Usa 0 para desactivarla.</small>
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm">Motivo</label>
@@ -74,6 +122,7 @@
     </div>
   </div>
   <ng-template #footer>
-    <p-button label="Ajustar" icon="pi pi-check" (onClick)="confirmarAjuste()" />
+    <p-button label="Cancelar" [text]="true" severity="secondary" (onClick)="mostrarAjuste.set(false)" />
+    <p-button label="Guardar" icon="pi pi-check" [loading]="guardando()" [disabled]="!puedeGuardar()" (onClick)="confirmarAjuste()" />
   </ng-template>
 </p-dialog>

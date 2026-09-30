@@ -119,7 +119,7 @@ public class VentaService
         }
         else if (totalPagado + 0.01m < total)
         {
-            throw new PagosInsuficientesException(total, totalPagado);
+            throw new PagosInsuficientesException(total, totalPagado, empresa.SimboloMoneda);
         }
 
         // --- Paso 2: transacción — folio, descuento de stock, inserciones ---

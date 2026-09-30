@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace MiniMarket.Domain.Exceptions;
 
 /// <summary>Excepción base para violaciones de reglas de negocio. La API la traduce a una respuesta 4xx
@@ -27,8 +29,8 @@ public sealed class CajaYaAbiertaException : DomainException
 
 public sealed class PagosInsuficientesException : DomainException
 {
-    public PagosInsuficientesException(decimal total, decimal totalPagado)
-        : base($"La suma de los pagos ({totalPagado:0.00}) no cubre el total de la venta ({total:0.00}).")
+    public PagosInsuficientesException(decimal total, decimal totalPagado, string simboloMoneda)
+        : base($"La suma de los pagos ({simboloMoneda}{totalPagado.ToString("0.00", CultureInfo.InvariantCulture)}) no cubre el total de la venta ({simboloMoneda}{total.ToString("0.00", CultureInfo.InvariantCulture)}).")
     {
     }
 }

@@ -19,6 +19,11 @@ export class ConfigService {
 
   constructor(private readonly empresaService: EmpresaService) {}
 
+  /** Monto con el símbolo de la empresa (ej. "Q12.50"). Única fuente del formato: la usan el pipe "moneda" y los toasts. */
+  formatear(valor: number | null | undefined): string {
+    return `${this.simboloMoneda()}${(valor ?? 0).toFixed(2)}`;
+  }
+
   cargar(): void {
     this.empresaService.obtenerActual().subscribe({
       next: (empresa) => this.empresaSignal.set(empresa),
