@@ -23,18 +23,24 @@ public sealed class MainForm : Form
     private readonly IServiceProvider _services;
     private readonly SessionService _sesion;
     private readonly ApiHealthMonitor _salud;
+    private readonly NotificacionService _notificaciones;
 
     private readonly ToolStripStatusLabel _lblServicio = new() { Text = "● Verificando base de datos..." };
     private readonly ToolStripStatusLabel _lblReloj = new();
     private readonly System.Windows.Forms.Timer _reloj = new() { Interval = 1000 };
+    private readonly ToolStripMenuItem _campana = new("🔔") { Alignment = ToolStripItemAlignment.Right, ToolTipText = "Notificaciones" };
+
+    /// <summary>Máximo de notificaciones listadas en la campanita; el resto se ve en Existencias.</summary>
+    private const int MaxNotificacionesMenu = 15;
 
     public bool CerrarSesionSolicitado { get; private set; }
 
-    public MainForm(IServiceProvider services, SessionService sesion, ApiHealthMonitor salud)
+    public MainForm(IServiceProvider services, SessionService sesion, ApiHealthMonitor salud, NotificacionService notificaciones)
     {
         _services = services;
         _sesion = sesion;
         _salud = salud;
+        _notificaciones = notificaciones;
 
         Theme.Aplicar(this);
         IsMdiContainer = true;
@@ -49,6 +55,8 @@ public sealed class MainForm : Form
 
         _sesion.SesionExpirada += OnSesionExpirada;
         _salud.EstadoCambiado += OnEstadoServicio;
+        _notificaciones.Cambiado += OnNotificacionesCambiadas;
+        _notificaciones.Nuevas += OnNotificacionesNuevas;
         _reloj.Tick += (_, _) => _lblReloj.Text = DateTime.Now.ToString("dddd dd/MM/yyyy  HH:mm");
         _reloj.Start();
     }
@@ -101,6 +109,14 @@ public sealed class MainForm : Form
         ventanas.DropDownItems.Add("Cerrar todas", null, (_, _) => { foreach (var f in MdiChildren) f.Close(); });
         menu.Items.Add(ventanas);
 
+        // Campanita de alertas de stock mínimo (a la derecha del menú), igual que en la versión web.
+        _campana.Visible = _sesion.Tiene(Permisos.InventarioVer);
+        _campana.Font = new Font(Theme.Fuente.FontFamily, 11F);
+        // Al abrirla se vuelve a consultar: cubre los movimientos hechos desde otras cajas.
+        _campana.DropDownOpening += (_, _) => _notificaciones.Refrescar();
+        ConstruirCampana();
+        menu.Items.Add(_campana);
+
         return menu;
     }
 
@@ -137,6 +153,77 @@ public sealed class MainForm : Form
         return form;
     }
 
+    private void ConstruirCampana()
+    {
+        var lista = _notificaciones.Notificaciones;
+        var noLeidas = _notificaciones.NoLeidas;
+        _campana.Text = noLeidas > 0 ? $"🔔 {noLeidas}" : "🔔";
+        _campana.ForeColor = noLeidas > 0 ? Theme.Peligro : Color.Black;
+        _campana.ToolTipText = noLeidas switch
+        {
+            0 => "Notificaciones",
+            1 => "1 notificación sin leer",
+            _ => $"{noLeidas} notificaciones sin leer"
+        };
+
+        var items = _campana.DropDownItems;
+        items.Clear();
+        items.Add(new ToolStripMenuItem("Notificaciones") { Enabled = false, Font = Theme.FuenteNegrita });
+        if (noLeidas > 0) items.Add("Marcar todas como leídas", null, (_, _) => _notificaciones.MarcarTodasLeidas());
+        items.Add(new ToolStripSeparator());
+
+        if (lista.Count == 0)
+            items.Add(new ToolStripMenuItem("No hay notificaciones: el stock está por encima del mínimo.") { Enabled = false });
+
+        foreach (var n in lista.Take(MaxNotificacionesMenu))
+        {
+            var item = new ToolStripMenuItem($"{(n.Leida ? "    " : "●  ")}{n.Texto}   ·   {Relativo(n.FechaUtc)}")
+            {
+                Font = n.Leida ? Theme.Fuente : Theme.FuenteNegrita,
+                ForeColor = n.SinStock ? Theme.Peligro : Color.Black,
+                ToolTipText = "Ver en Existencias"
+            };
+            item.Click += (_, _) =>
+            {
+                _notificaciones.MarcarLeida(n.Id);
+                Abrir<InventarioForm>().MostrarBajoMinimo(n.ProductoNombre);
+            };
+            items.Add(item);
+        }
+
+        if (lista.Count > 0)
+        {
+            items.Add(new ToolStripSeparator());
+            var resto = lista.Count - MaxNotificacionesMenu;
+            items.Add(resto > 0 ? $"Ver todos en Existencias ({resto} más)..." : "Ver todos en Existencias...", null,
+                (_, _) => Abrir<InventarioForm>().MostrarBajoMinimo());
+        }
+    }
+
+    private static string Relativo(DateTime utc)
+    {
+        var transcurrido = DateTime.UtcNow - utc;
+        if (transcurrido.TotalMinutes < 1) return "hace un momento";
+        if (transcurrido.TotalHours < 1) return $"hace {(int)transcurrido.TotalMinutes} min";
+        if (transcurrido.TotalDays < 1) return $"hace {(int)transcurrido.TotalHours} h";
+        return Formatters.Fecha(utc);
+    }
+
+    private void OnNotificacionesCambiadas(object? sender, EventArgs e)
+    {
+        if (IsDisposed) return;
+        ConstruirCampana();
+    }
+
+    private void OnNotificacionesNuevas(object? sender, NotificacionesNuevasEventArgs e)
+    {
+        if (IsDisposed || !Visible) return;
+        var mensaje = e.Nuevas.Count == 1
+            ? e.Nuevas[0].Texto
+            : $"{e.Nuevas.Count} productos {(e.PrimeraCarga ? "están" : "llegaron")} en su stock mínimo. Revise las notificaciones.";
+        Toast.Mostrar(this, "Stock mínimo", mensaje, () => _campana.ShowDropDown());
+    }
+
     private StatusStrip ConstruirBarraEstado()
     {
         var u = _sesion.Usuario!;
@@ -157,6 +244,7 @@ public sealed class MainForm : Form
         // El login ya verificó la base de datos: el evento solo avisa cambios, así que se pinta el estado actual.
         OnEstadoServicio(this, _salud.Estado);
         _salud.Iniciar();
+        _notificaciones.Iniciar();
         // El cajero entra directo al punto de venta.
         if (_sesion.Tiene(Permisos.VentasCrear)) Abrir<PosForm>();
     }
@@ -216,6 +304,9 @@ public sealed class MainForm : Form
     {
         _salud.Detener();
         _salud.EstadoCambiado -= OnEstadoServicio;
+        _notificaciones.Cambiado -= OnNotificacionesCambiadas;
+        _notificaciones.Nuevas -= OnNotificacionesNuevas;
+        _notificaciones.Detener();
         _sesion.SesionExpirada -= OnSesionExpirada;
         _reloj.Dispose();
         base.OnFormClosed(e);

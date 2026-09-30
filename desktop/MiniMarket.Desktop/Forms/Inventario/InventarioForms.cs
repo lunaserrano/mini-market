@@ -1,18 +1,20 @@
 namespace MiniMarket.Desktop.Forms.Inventario;
 
-/// <summary>Existencias de la sucursal del usuario, con alerta de stock mínimo y ajustes manuales.</summary>
+/// <summary>Existencias de la sucursal del usuario, con alerta de stock mínimo, ajustes manuales y configuración del mínimo.</summary>
 public sealed class InventarioForm : ListForm<InventarioDto>
 {
     private readonly InventarioApi _api;
     private readonly SessionService _sesion;
+    private readonly NotificacionService _notificaciones;
     private readonly CheckBox _soloBajos = new() { Text = "Solo bajo mínimo", AutoSize = true, Margin = new Padding(12, 8, 4, 4) };
 
-    public InventarioForm(InventarioApi api, SessionService sesion) : base("Existencias")
+    public InventarioForm(InventarioApi api, SessionService sesion, NotificacionService notificaciones) : base("Existencias")
     {
         _api = api;
         _sesion = sesion;
+        _notificaciones = notificaciones;
 
-        BtnEditar.Text = "Ajustar stock";
+        BtnEditar.Text = "Ajustar stock / mínimo";
         var movimientos = Theme.Boton("Ver movimientos", (_, _) =>
         {
             var form = (MdiParent as MainForm)?.Abrir<MovimientosInventarioForm>();
@@ -25,6 +27,13 @@ public sealed class InventarioForm : ListForm<InventarioDto>
     }
 
     public override string Ruta => "inventario";
+
+    /// <summary>Desde la campanita: muestra solo lo que está bajo el mínimo, opcionalmente filtrado por producto.</summary>
+    public void MostrarBajoMinimo(string? producto = null)
+    {
+        _soloBajos.Checked = true;
+        Buscar.Text = producto ?? "";
+    }
 
     protected override bool PuedeEditar => _sesion.Tiene(Permisos.InventarioAjustar);
     protected override Color? ColorFila(InventarioDto item) => item.BajoMinimo ? Theme.FilaAlerta : null;
@@ -48,19 +57,46 @@ public sealed class InventarioForm : ListForm<InventarioDto>
     protected override bool EsInactivo(InventarioDto item) => _soloBajos.Checked && !item.BajoMinimo;
     protected override bool TieneEstado => _soloBajos.Checked;
 
+    /// <summary>
+    /// Ajuste de cantidad y/o cambio del stock mínimo (al llegar a él aparece la alerta en la campanita).
+    /// Se puede guardar solo uno de los dos: el motivo es obligatorio únicamente si cambia la cantidad.
+    /// </summary>
     private async Task AjustarAsync(InventarioDto item)
     {
         using var dlg = new EditDialog($"Ajuste de inventario: {item.ProductoNombre}");
         dlg.AgregarAncho(new Label { Text = $"Stock actual: {Formatters.Cantidad(item.StockActual)}", Font = Theme.FuenteNegrita, AutoSize = true });
-        var cantidad = dlg.AgregarNumero("Cantidad (+ entra / − sale) *", 0, decimales: 3, minimo: -1_000_000, maximo: 1_000_000);
+        var cantidad = dlg.AgregarNumero("Cantidad (+ entra / − sale)", 0, decimales: 3, minimo: -1_000_000, maximo: 1_000_000);
         var resultado = dlg.AgregarAncho(new Label { AutoSize = true, ForeColor = Theme.TextoSuave });
-        var observacion = dlg.AgregarTexto("Motivo *", "", multilinea: true, maxLength: 250);
+        var observacion = dlg.AgregarTexto("Motivo (si ajusta la cantidad)", "", multilinea: true, maxLength: 250);
+        var minimo = dlg.AgregarNumero("Stock mínimo", item.StockMinimo, decimales: 3, minimo: 0, maximo: 1_000_000);
+        dlg.AgregarAncho(new Label
+        {
+            Text = "Al llegar a este stock se avisa en la campanita de notificaciones. 0 = sin alerta.",
+            AutoSize = true,
+            MaximumSize = new Size(440, 0),
+            ForeColor = Theme.TextoSuave
+        });
         cantidad.ValueChanged += (_, _) => resultado.Text = $"Stock resultante: {Formatters.Cantidad(item.StockActual + cantidad.Value)}";
-        dlg.Validar(() => cantidad.Value == 0 ? "La cantidad del ajuste no puede ser cero." : null);
-        dlg.Validar(() => string.IsNullOrWhiteSpace(observacion.Text) ? "Indique el motivo del ajuste." : null);
+
+        bool CambiaMinimo() => minimo.Value != item.StockMinimo;
+        dlg.Validar(() => cantidad.Value == 0 && !CambiaMinimo() ? "Indique una cantidad a ajustar o un nuevo stock mínimo." : null);
+        dlg.Validar(() => cantidad.Value != 0 && string.IsNullOrWhiteSpace(observacion.Text) ? "Indique el motivo del ajuste." : null);
         dlg.Validar(() => item.StockActual + cantidad.Value < 0 ? "El ajuste dejaría el stock en negativo." : null);
-        dlg.AlGuardar(() => _api.AjustarAsync(new AjusteInventarioRequest(item.ProductoId, item.SucursalId, cantidad.Value, observacion.Text.Trim())));
-        if (dlg.ShowDialog(this) == DialogResult.OK) await CargarAsync();
+        var minimoGuardado = false;
+        dlg.AlGuardar(async () =>
+        {
+            if (CambiaMinimo())
+            {
+                await _api.ActualizarStockMinimoAsync(new StockMinimoRequest(item.ProductoId, item.SucursalId, minimo.Value));
+                minimoGuardado = true;
+            }
+            if (cantidad.Value != 0)
+                await _api.AjustarAsync(new AjusteInventarioRequest(item.ProductoId, item.SucursalId, cantidad.Value, observacion.Text.Trim()));
+        });
+        // minimoGuardado cubre el caso "se guardó el mínimo, falló el ajuste y se canceló el diálogo".
+        if (dlg.ShowDialog(this) != DialogResult.OK && !minimoGuardado) return;
+        await CargarAsync();
+        _notificaciones.Refrescar();
     }
 }
 

@@ -65,6 +65,7 @@ public sealed class PosForm : ChildForm
     private readonly ClientesApi _clientes;
     private readonly SessionService _sesion;
     private readonly TicketPrinter _printer;
+    private readonly NotificacionService _notificaciones;
 
     private CajaDto? _caja;
     private readonly BindingList<LineaCarrito> _carrito = new();
@@ -83,7 +84,8 @@ public sealed class PosForm : ChildForm
     private readonly Label _lblArticulos = new() { AutoSize = true, ForeColor = Theme.TextoSuave };
     private readonly Button _btnCobrar;
 
-    public PosForm(ProductosApi productos, CajaApi cajaApi, VentasApi ventas, ClientesApi clientes, SessionService sesion, TicketPrinter printer)
+    public PosForm(ProductosApi productos, CajaApi cajaApi, VentasApi ventas, ClientesApi clientes, SessionService sesion, TicketPrinter printer,
+        NotificacionService notificaciones)
     {
         _productos = productos;
         _cajaApi = cajaApi;
@@ -91,6 +93,7 @@ public sealed class PosForm : ChildForm
         _clientes = clientes;
         _sesion = sesion;
         _printer = printer;
+        _notificaciones = notificaciones;
         Text = "Punto de venta";
 
         _btnAbrirCaja = Theme.Boton("Ir a Caja", (_, _) => (MdiParent as MainForm)?.Abrir<CajaForm>(), primario: true);
@@ -470,6 +473,7 @@ public sealed class PosForm : ChildForm
                           (saldo > 0 ? $"\nA crédito: {Formatters.Moneda(saldo)}" : "") +
                           "\n\n¿Imprimir ticket?";
             Reiniciar();
+            _notificaciones.Refrescar();
             if (Dialogs.Confirmar(this, resumen, "Venta registrada"))
                 _printer.Imprimir(this, _printer.Construir(venta, cliente?.Nombre, saldo, cobro.EfectivoRecibido));
         });

@@ -74,6 +74,7 @@ public sealed class InventarioApi(ApiHttp http)
     public Task<InventarioDto?> ObtenerAsync(int productoId, int sucursalId) =>
         http.GetOrDefaultAsync<InventarioDto>($"inventario/{productoId}/sucursal/{sucursalId}");
     public Task AjustarAsync(AjusteInventarioRequest request) => http.PostAsync("inventario/ajuste", request);
+    public Task ActualizarStockMinimoAsync(StockMinimoRequest request) => http.PutAsync("inventario/stock-minimo", request);
     public Task<List<MovimientoInventarioDto>> MovimientosAsync(int? productoId, int? sucursalId, DateTime? desde, DateTime? hasta) =>
         http.GetAsync<List<MovimientoInventarioDto>>(Query("inventario/movimientos",
             ("productoId", productoId), ("sucursalId", sucursalId), ("desde", desde), ("hasta", hasta)));

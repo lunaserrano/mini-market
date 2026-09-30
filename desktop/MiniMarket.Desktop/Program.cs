@@ -60,6 +60,7 @@ internal static class Program
         services.AddSingleton<TokenStore>();
         services.AddSingleton<SessionService>();
         services.AddSingleton<ApiHealthMonitor>();
+        services.AddSingleton<NotificacionService>();
         services.AddSingleton<TicketPrinter>();
         services.AddTransient<NavegacionAuditor>();
 

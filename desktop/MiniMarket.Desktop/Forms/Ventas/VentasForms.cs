@@ -9,15 +9,17 @@ public sealed class VentasForm : ListForm<VentaResumenDto>
     private readonly VentasApi _api;
     private readonly SessionService _sesion;
     private readonly TicketPrinter _printer;
+    private readonly NotificacionService _notificaciones;
     private readonly DateTimePicker _desde = new() { Format = DateTimePickerFormat.Short, Width = 120 };
     private readonly DateTimePicker _hasta = new() { Format = DateTimePickerFormat.Short, Width = 120 };
     private readonly Label _totales = new() { AutoSize = true, Font = Theme.FuenteNegrita, Margin = new Padding(12, 9, 4, 4) };
 
-    public VentasForm(VentasApi api, SessionService sesion, TicketPrinter printer) : base("Ventas")
+    public VentasForm(VentasApi api, SessionService sesion, TicketPrinter printer, NotificacionService notificaciones) : base("Ventas")
     {
         _api = api;
         _sesion = sesion;
         _printer = printer;
+        _notificaciones = notificaciones;
         _desde.Value = DateTime.Today;
         _hasta.Value = DateTime.Today;
         BtnEditar.Text = "Ver detalle";
@@ -67,7 +69,9 @@ public sealed class VentasForm : ListForm<VentaResumenDto>
         var venta = await _api.ObtenerAsync(item.Id);
         using var detalle = new VentaDetalleForm(venta, item.ClienteNombre, item.SaldoCredito, _api, _sesion, _printer);
         detalle.ShowDialog(this);
-        if (detalle.Anulada) await CargarAsync();
+        if (!detalle.Anulada) return;
+        await CargarAsync();
+        _notificaciones.Refrescar();
     }
 }
 

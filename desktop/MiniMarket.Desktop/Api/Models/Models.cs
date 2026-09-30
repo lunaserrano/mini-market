@@ -59,8 +59,11 @@ public record ProductoPosDto(int ProductoId, string Nombre, string? CodigoBarras
 // ---------- Inventario ----------
 public record InventarioDto(int ProductoId, string ProductoNombre, int SucursalId, decimal StockActual, decimal StockMinimo)
 {
-    public bool BajoMinimo => StockActual <= StockMinimo;
+    /// <summary>Stock en o por debajo del mínimo configurado (un mínimo de 0 significa "sin alerta"), igual que el frontend web.</summary>
+    public bool BajoMinimo => StockMinimo > 0 && StockActual <= StockMinimo;
 }
+
+public record StockMinimoRequest(int ProductoId, int SucursalId, decimal StockMinimo);
 
 public record AjusteInventarioRequest(int ProductoId, int SucursalId, decimal CantidadAjuste, string Observacion);
 

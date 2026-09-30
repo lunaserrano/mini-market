@@ -8,13 +8,16 @@ public sealed class ComprasForm : ListForm<CompraResumenDto>
     private readonly ProveedoresApi _proveedores;
     private readonly ProductosApi _productos;
     private readonly SessionService _sesion;
+    private readonly NotificacionService _notificaciones;
 
-    public ComprasForm(ComprasApi compras, ProveedoresApi proveedores, ProductosApi productos, SessionService sesion) : base("Compras")
+    public ComprasForm(ComprasApi compras, ProveedoresApi proveedores, ProductosApi productos, SessionService sesion,
+        NotificacionService notificaciones) : base("Compras")
     {
         _compras = compras;
         _proveedores = proveedores;
         _productos = productos;
         _sesion = sesion;
+        _notificaciones = notificaciones;
         BtnNuevo.Text = "Registrar compra";
         BtnEditar.Text = "Ver detalle";
     }
@@ -47,7 +50,9 @@ public sealed class ComprasForm : ListForm<CompraResumenDto>
             return;
         }
         using var editor = new CompraEditForm(_compras, proveedores, productos);
-        if (editor.ShowDialog(this) == DialogResult.OK) await CargarAsync();
+        if (editor.ShowDialog(this) != DialogResult.OK) return;
+        await CargarAsync();
+        _notificaciones.Refrescar();
     }
 
     protected override async Task EditarAsync(CompraResumenDto item)
@@ -85,7 +90,9 @@ public sealed class ComprasForm : ListForm<CompraResumenDto>
             await _compras.AnularAsync(compra.Id);
         });
         dlg.AcceptButton = null;
-        if (dlg.ShowDialog(this) == DialogResult.OK) await CargarAsync();
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        await CargarAsync();
+        _notificaciones.Refrescar();
     }
 }
 
