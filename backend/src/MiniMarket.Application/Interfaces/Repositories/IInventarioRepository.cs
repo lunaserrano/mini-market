@@ -16,6 +16,9 @@ public interface IInventarioRepository
     Task<int> CrearAsync(Inventario inventario, IDbTransaction? transaction = null);
     Task ActualizarStockAsync(int productoId, int sucursalId, decimal nuevoStock, IDbTransaction transaction);
 
+    /// <summary>Upsert: si el producto no tiene fila de inventario en la sucursal, la crea con stock 0.</summary>
+    Task ActualizarStockMinimoAsync(int productoId, int sucursalId, decimal stockMinimo);
+
     Task<int> RegistrarMovimientoAsync(MovimientoInventario movimiento, IDbTransaction transaction);
     Task<IReadOnlyList<MovimientoInventarioDto>> ListarMovimientosAsync(int empresaId, MovimientoInventarioFiltro filtro);
 }

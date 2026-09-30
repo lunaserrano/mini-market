@@ -4,6 +4,8 @@ public record InventarioDto(int ProductoId, string ProductoNombre, int SucursalI
 
 public record AjusteInventarioRequest(int ProductoId, int SucursalId, decimal CantidadAjuste, string Observacion);
 
+public record StockMinimoRequest(int ProductoId, int SucursalId, decimal StockMinimo);
+
 public record MovimientoInventarioDto(
     int Id,
     int ProductoId,

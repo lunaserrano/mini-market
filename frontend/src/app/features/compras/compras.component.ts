@@ -9,6 +9,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { MessageService } from 'primeng/api';
 import { CompraService } from '../../core/services/compra.service';
+import { NotificacionService } from '../../core/services/notificacion.service';
 import { ProveedorService } from '../../core/services/catalogo.service';
 import { ProductoService } from '../../core/services/producto.service';
 import { CompraResumen, DetalleCompraCreate } from '../../core/models/compra.models';
@@ -37,7 +38,8 @@ export class ComprasComponent implements OnInit {
     private readonly compraService: CompraService,
     private readonly proveedorService: ProveedorService,
     private readonly productoService: ProductoService,
-    private readonly messageService: MessageService
+    private readonly messageService: MessageService,
+    private readonly notificacionService: NotificacionService
   ) {}
 
   ngOnInit(): void {
@@ -113,11 +115,15 @@ export class ComprasComponent implements OnInit {
     this.compraService.crear({ proveedorId: this.proveedorId, numeroDocumentoProveedor: this.numeroDocumentoProveedor, detalles: this.detalles }).subscribe(() => {
       this.mostrarFormulario.set(false);
       this.cargar();
+      this.notificacionService.refrescar();
       this.messageService.add({ severity: 'success', summary: 'Compra registrada' });
     });
   }
 
   anular(compra: CompraResumen): void {
-    this.compraService.anular(compra.id).subscribe(() => this.cargar());
+    this.compraService.anular(compra.id).subscribe(() => {
+      this.cargar();
+      this.notificacionService.refrescar();
+    });
   }
 }

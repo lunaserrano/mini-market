@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -8,6 +8,9 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ToastModule } from 'primeng/toast';
 import { AuthService } from '../core/services/auth.service';
 import { ConfigService } from '../core/services/config.service';
+import { NotificacionService } from '../core/services/notificacion.service';
+import { NotificacionesComponent } from '../shared/components/notificaciones/notificaciones.component';
+import { PERMISOS } from '../core/security/permisos';
 import { MENU_ITEMS } from './menu-items';
 
 /** Breakpoint 'lg' de Tailwind: desde aquí el sidebar es un riel fijo; debajo, un cajón (drawer) superpuesto. */
@@ -16,7 +19,7 @@ const ANCHO_ESCRITORIO = 1024;
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, ToastModule, ConfirmDialogModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, ToastModule, ConfirmDialogModule, NotificacionesComponent],
   providers: [ConfirmationService],
   animations: [
     // Reinicia la animación en cada navegación porque rutaActual() cambia de valor (URL completa).
@@ -83,6 +86,9 @@ const ANCHO_ESCRITORIO = 1024;
             <span class="hidden sm:inline text-sm text-surface-600 dark:text-surface-300 truncate max-w-[16rem]">
               {{ usuario()?.nombreCompleto }} · {{ usuario()?.rolNombre }}
             </span>
+            @if (puedeVerNotificaciones()) {
+              <app-notificaciones />
+            }
             <a routerLink="/auth/cambiar-password" title="Cambiar contraseña">
               <p-button icon="pi pi-key" [text]="true" [rounded]="true" severity="secondary" />
             </a>
@@ -96,11 +102,13 @@ const ANCHO_ESCRITORIO = 1024;
     </div>
   `
 })
-export class AppLayoutComponent implements OnInit {
+export class AppLayoutComponent implements OnInit, OnDestroy {
   readonly sidebarAbierto = signal(this.esEscritorio());
   /** URL completa actual; cambia en cada navegación y así reinicia la animación de entrada del contenido. */
   readonly rutaActual = signal('');
   readonly usuario = computed(() => this.authService.usuario());
+  /** La campanita solo tiene alertas de stock mínimo por ahora: requiere poder ver el inventario. */
+  readonly puedeVerNotificaciones = computed(() => this.authService.tienePermiso(PERMISOS.InventarioVer));
   /** Entradas del menú que el usuario puede ver según sus permisos, con el encabezado de sección donde empieza cada una. */
   readonly menuVisible = computed(() => {
     const visibles = MENU_ITEMS.filter((item) => this.authService.tienePermiso(...item.permisos));
@@ -113,6 +121,7 @@ export class AppLayoutComponent implements OnInit {
   constructor(
     readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly notificacionService: NotificacionService,
     private readonly confirmationService: ConfirmationService,
     private readonly router: Router
   ) {
@@ -125,6 +134,11 @@ export class AppLayoutComponent implements OnInit {
     // Carga la moneda/zona horaria de la empresa una vez, para toda la sesión (incluye recargas
     // de página con el token todavía válido, ya que este layout es el shell de todas las rutas autenticadas).
     this.configService.cargar();
+    this.notificacionService.iniciar();
+  }
+
+  ngOnDestroy(): void {
+    this.notificacionService.detener();
   }
 
   alternarSidebar(): void {

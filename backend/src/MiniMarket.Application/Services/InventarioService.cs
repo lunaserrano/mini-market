@@ -42,6 +42,18 @@ public class InventarioService
     public Task<IReadOnlyList<MovimientoInventarioDto>> ListarMovimientosAsync(MovimientoInventarioFiltro filtro) =>
         _inventarioRepository.ListarMovimientosAsync(_tenant.EmpresaId, filtro);
 
+    /// <summary>Define el stock mínimo del producto en la sucursal; al alcanzarlo, el frontend muestra una alerta.</summary>
+    public async Task ActualizarStockMinimoAsync(StockMinimoRequest request)
+    {
+        if (request.StockMinimo < 0)
+            throw new ReglaDeNegocioException("El stock mínimo no puede ser negativo.");
+
+        _ = await _productoRepository.ObtenerEntidadAsync(_tenant.EmpresaId, request.ProductoId)
+            ?? throw new EntidadNoEncontradaException("Producto", request.ProductoId);
+
+        await _inventarioRepository.ActualizarStockMinimoAsync(request.ProductoId, request.SucursalId, request.StockMinimo);
+    }
+
     /// <summary>Ajuste manual de stock (+/-). Genera un MovimientoInventario con tipo AjustePositivo/AjusteNegativo.</summary>
     public async Task AjustarAsync(AjusteInventarioRequest request)
     {

@@ -33,6 +33,14 @@ public class InventarioController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("stock-minimo")]
+    [HasPermission(Permisos.InventarioAjustar)]
+    public async Task<IActionResult> ActualizarStockMinimo(StockMinimoRequest request)
+    {
+        await _service.ActualizarStockMinimoAsync(request);
+        return NoContent();
+    }
+
     [HttpGet("movimientos")]
     [HasPermission(Permisos.InventarioVer)]
     public async Task<IActionResult> ListarMovimientos([FromQuery] int? productoId, [FromQuery] int? sucursalId,

@@ -12,6 +12,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CajaService } from '../../core/services/caja.service';
 import { ClienteService } from '../../core/services/catalogo.service';
 import { ConfigService } from '../../core/services/config.service';
+import { NotificacionService } from '../../core/services/notificacion.service';
 import { ProductoService } from '../../core/services/producto.service';
 import { VentaService } from '../../core/services/venta.service';
 import { Caja } from '../../core/models/caja.models';
@@ -113,7 +114,8 @@ export class PosVentasComponent implements OnInit {
     private readonly configService: ConfigService,
     private readonly messageService: MessageService,
     private readonly router: Router,
-    private readonly clienteService: ClienteService
+    private readonly clienteService: ClienteService,
+    private readonly notificacionService: NotificacionService
   ) {
     this.busqueda$
       .pipe(
@@ -240,7 +242,6 @@ export class PosVentasComponent implements OnInit {
     // Validación explícita además del [disabled] del botón: por si el total cambia entre que se
     // renderiza y se hace clic (o el usuario logra saltarse el disabled), nunca se manda una venta
     // con pagos insuficientes — se avisa con un toast en vez de dejar que el backend tire una excepción.
-    const simbolo = this.configService.simboloMoneda();
     if (this.alCredito) {
       if (this.clienteId === null || this.saldoCredito() <= EPSILON) {
         this.messageService.add({
@@ -260,7 +261,7 @@ export class PosVentasComponent implements OnInit {
         this.messageService.add({
           severity: 'warn',
           summary: 'Pago incompleto',
-          detail: `Faltan ${simbolo}${faltante.toFixed(2)} para cubrir el total.`,
+          detail: `Faltan ${this.configService.formatear(faltante)} para cubrir el total.`,
           life: 5000
         });
         return;
@@ -292,12 +293,13 @@ export class PosVentasComponent implements OnInit {
           this.carrito.set([]);
           this.clienteId = null;
           this.alCredito = false;
+          this.notificacionService.refrescar();
           this.messageService.add({
             severity: 'success',
             summary: alCredito ? 'Venta a crédito registrada' : 'Venta registrada',
             detail: alCredito
-              ? `Folio #${venta.folio} · Total ${simbolo}${venta.total.toFixed(2)} · A crédito ${simbolo}${saldoCredito.toFixed(2)}`
-              : `Folio #${venta.folio} · Total ${simbolo}${venta.total.toFixed(2)}`,
+              ? `Folio #${venta.folio} · Total ${this.configService.formatear(venta.total)} · A crédito ${this.configService.formatear(saldoCredito)}`
+              : `Folio #${venta.folio} · Total ${this.configService.formatear(venta.total)}`,
             life: 6000
           });
         },

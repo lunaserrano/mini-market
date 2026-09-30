@@ -68,6 +68,14 @@ public class InventarioRepository : IInventarioRepository
             commandType: CommandType.StoredProcedure);
     }
 
+    public async Task ActualizarStockMinimoAsync(int productoId, int sucursalId, decimal stockMinimo)
+    {
+        using var connection = _connectionFactory.CreateOpenConnection();
+        await connection.ExecuteAsync(
+            "market.usp_Inventario_ActualizarStockMinimo", new { productoId, sucursalId, stockMinimo },
+            commandType: CommandType.StoredProcedure);
+    }
+
     public async Task<int> RegistrarMovimientoAsync(MovimientoInventario movimiento, IDbTransaction transaction)
     {
         return await transaction.Connection!.QuerySingleAsync<int>("market.usp_MovimientoInventario_Registrar", new

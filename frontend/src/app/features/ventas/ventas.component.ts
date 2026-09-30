@@ -11,6 +11,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
+import { NotificacionService } from '../../core/services/notificacion.service';
 import { VentaService } from '../../core/services/venta.service';
 import { Venta, VentaResumen } from '../../core/models/venta.models';
 import { MonedaPipe } from '../../core/pipes/moneda.pipe';
@@ -49,7 +50,8 @@ export class VentasComponent implements OnInit {
   constructor(
     private readonly ventaService: VentaService,
     readonly authService: AuthService,
-    private readonly messageService: MessageService
+    private readonly messageService: MessageService,
+    private readonly notificacionService: NotificacionService
   ) {}
 
   ngOnInit(): void {
@@ -79,6 +81,7 @@ export class VentasComponent implements OnInit {
     this.ventaService.anular(this.ventaAnularId, this.motivoAnulacion, this.restituirStock).subscribe(() => {
       this.mostrarAnular.set(false);
       this.cargar();
+      this.notificacionService.refrescar();
       this.messageService.add({ severity: 'success', summary: 'Venta anulada' });
     });
   }
